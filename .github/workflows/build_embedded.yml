@@ -17,14 +17,15 @@ jobs:
     - name: Build
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
+        cd EXAMPLE
         chmod +x ./build_win_bin_ninja.sh
-        ./build_win_bin_ninja.sh
+        ./EXAMPLE/build_win_bin_ninja.sh
     - name: Upload
       uses: actions/upload-artifact@v3
       with:
         name: embedded_secured
         path: |
-           ./build_win_bin/*/*.bin
+           ./EXAMPLE/build_win_bin/*/*.bin
            ./*.md
            ./*/*.md
            ./*/*/*.jpg
@@ -41,8 +42,9 @@ jobs:
     - name: Build
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
-        chmod +x ./build_win_bin_ninja_unsecured.sh
-        ./build_win_bin_ninja_unsecured.sh
+        cd EXAMPLE
+        chmod +x ./EXAMPLE/build_win_bin_ninja_unsecured.sh
+        ./EXAMPLE/build_win_bin_ninja_unsecured.sh
     - name: Upload unsecured binaries
       uses: actions/upload-artifact@v3
       with:

@@ -1,158 +1,162 @@
 name: BuildAllAndRelease
 
-on: 
-  workflow_dispatch:
-    branches: [main]
-    inputs:
-      release_tag_name:
-        description: 'release tag name e.g. "knx_vx.y.z"'
-        required: true
+# on: 
+#   workflow_dispatch:
+#     branches: [elie-ci]
+    # inputs:
+    #   release_tag_name:
+    #     description: 'release tag name e.g. "knx_vx.y.z"'
+    #     required: true
 
-env:
-  MATRIX: "{ 
-       \"config\": [
-            {
-              \"name\": \"Windows Latest MSVC\",
-              \"artifact\": \"Windows-MSVC.tar.xz\",
-              \"os\": \"windows-latest\",
-              \"build_type\": \"Release\",
-              \"cc\": \"cl\",
-              \"cxx\": \"cl\",
-              \"environment_script\": \"C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat\",
-              \"option\": \"-D OC_OSCORE_ENABLED=ON -DUSE_CONSOLE=OFF\",
-              \"option_name\": \"secured\",
-              \"folder\": \"PROD\"
-            }
-          ]
-        }"
+on:   
+  push:
+    branches: [ elie-ci ]
+
+# env:
+#   MATRIX: "{ 
+#        \"config\": [
+#             {
+#               \"name\": \"Windows Latest MSVC\",
+#               \"artifact\": \"Windows-MSVC.tar.xz\",
+#               \"os\": \"windows-latest\",
+#               \"build_type\": \"Release\",
+#               \"cc\": \"cl\",
+#               \"cxx\": \"cl\",
+#               \"environment_script\": \"C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvars64.bat\",
+#               \"option\": \"-D OC_OSCORE_ENABLED=ON -DUSE_CONSOLE=OFF\",
+#               \"option_name\": \"secured\",
+#               \"folder\": \"PROD\"
+#             }
+#           ]
+#         }"
 
 jobs:
-  # Makes the matrix available to use
-  setup_windows:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        run: echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+  # # Makes the matrix available to use
+  # setup_windows:
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     matrix: ${{ steps.set-matrix.outputs.matrix }}
+  #   steps:
+  #     - id: set-matrix
+  #       run: echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
-  # Builds KNX virtual applications for windows
-  build_windows:
-    needs: setup_windows
-    name: Build ${{ matrix.config.name }}
-    runs-on: ${{ matrix.config.os }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.setup_windows.outputs.matrix) }}
-    steps:
-    - uses: actions/checkout@v3
+  # # Builds KNX virtual applications for windows
+  # build_windows:
+  #   needs: setup_windows
+  #   name: Build ${{ matrix.config.name }}
+  #   runs-on: ${{ matrix.config.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix: ${{ fromJSON(needs.setup_windows.outputs.matrix) }}
+  #   steps:
+  #   - uses: actions/checkout@v3
 
-    - name: Checkout Submodules
-      run: git submodule update --init --recursive
+  #   - name: Checkout Submodules
+  #     run: git submodule update --init --recursive
 
-    - name: Download Ninja and CMake
-      id: cmake_and_ninja
-      shell: cmake -P {0}
-      run: |
-        set(ninja_version "1.9.0")
-        set(cmake_version "3.25.2")
+  #   - name: Download Ninja and CMake
+  #     id: cmake_and_ninja
+  #     shell: cmake -P {0}
+  #     run: |
+  #       set(ninja_version "1.9.0")
+  #       set(cmake_version "3.25.2")
         
-        message(STATUS "Using host CMake version: ${CMAKE_VERSION}")
-        if ("${{ runner.os }}" STREQUAL "Windows")
-          set(ninja_suffix "win.zip")
-          set(cmake_suffix "win64-x64.zip")
-          set(cmake_dir "cmake-${cmake_version}-win64-x64/bin")
-        elseif ("${{ runner.os }}" STREQUAL "Linux")
-          set(ninja_suffix "linux.zip")
-          set(cmake_suffix "Linux-x86_64.tar.gz")
-          set(cmake_dir "cmake-${cmake_version}-Linux-x86_64/bin")
-        elseif ("${{ runner.os }}" STREQUAL "macOS")
-          set(ninja_suffix "mac.zip")
-          set(cmake_suffix "Darwin-x86_64.tar.gz")
-          set(cmake_dir "cmake-${cmake_version}-Darwin-x86_64/CMake.app/Contents/bin")
-        endif()
-        set(ninja_url "https://github.com/ninja-build/ninja/releases/download/v${ninja_version}/ninja-${ninja_suffix}")
-        file(DOWNLOAD "${ninja_url}" ./ninja.zip SHOW_PROGRESS)
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ninja.zip)
-        set(cmake_url "https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cmake-${cmake_version}-${cmake_suffix}")
-        file(DOWNLOAD "${cmake_url}" ./cmake.zip SHOW_PROGRESS)
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./cmake.zip)
-        # Save the path for other steps
-        file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}/${cmake_dir}" cmake_dir)
-        message("cmake_dir=${cmake_dir}" >> $GITHUB_OUTPUT)
-        if (NOT "${{ runner.os }}" STREQUAL "Windows")
-          execute_process(
-            COMMAND chmod +x ninja
-            COMMAND chmod +x ${cmake_dir}/cmake
-          )
-        endif()
-    - name: folder creation
-      run: |
-        mkdir win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
-        cd win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
-        ls
-    - name: Configure
-      shell: cmake -P {0}
-      run: |
-        set(ENV{CC} ${{ matrix.config.cc }})
-        set(ENV{CXX} ${{ matrix.config.cxx }})
-        if ("${{ runner.os }}" STREQUAL "Windows" AND NOT "x${{ matrix.config.environment_script }}" STREQUAL "x")
-          execute_process(
-            COMMAND "${{ matrix.config.environment_script }}" && set
-            OUTPUT_FILE environment_script_output.txt
-          )
-          file(STRINGS environment_script_output.txt output_lines)
-          foreach(line IN LISTS output_lines)
-            if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-              set(ENV{${CMAKE_MATCH_1}} "${CMAKE_MATCH_2}")
-            endif()
-          endforeach()
-        endif()
-        file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}/ninja" ninja_program)
-        execute_process(
-          COMMAND cmake
-            -S ${{ matrix.config.folder }}
-            -B win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
-            -D CMAKE_BUILD_TYPE=${{ matrix.config.build_type }}
-            -G Ninja
-            -D CMAKE_MAKE_PROGRAM=${ninja_program} ${{ matrix.config.option }}
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status")
-        endif()
-    - name: Build
-      shell: cmake -P {0}
-      run: |
-        set(ENV{NINJA_STATUS} "[%f/%t %o/sec] ")
-        if ("${{ runner.os }}" STREQUAL "Windows" AND NOT "x${{ matrix.config.environment_script }}" STREQUAL "x")
-          file(STRINGS environment_script_output.txt output_lines)
-          foreach(line IN LISTS output_lines)
-            if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-              set(ENV{${CMAKE_MATCH_1}} "${CMAKE_MATCH_2}")
-            endif()
-          endforeach()
-        endif()
+  #       message(STATUS "Using host CMake version: ${CMAKE_VERSION}")
+  #       if ("${{ runner.os }}" STREQUAL "Windows")
+  #         set(ninja_suffix "win.zip")
+  #         set(cmake_suffix "win64-x64.zip")
+  #         set(cmake_dir "cmake-${cmake_version}-win64-x64/bin")
+  #       elseif ("${{ runner.os }}" STREQUAL "Linux")
+  #         set(ninja_suffix "linux.zip")
+  #         set(cmake_suffix "Linux-x86_64.tar.gz")
+  #         set(cmake_dir "cmake-${cmake_version}-Linux-x86_64/bin")
+  #       elseif ("${{ runner.os }}" STREQUAL "macOS")
+  #         set(ninja_suffix "mac.zip")
+  #         set(cmake_suffix "Darwin-x86_64.tar.gz")
+  #         set(cmake_dir "cmake-${cmake_version}-Darwin-x86_64/CMake.app/Contents/bin")
+  #       endif()
+  #       set(ninja_url "https://github.com/ninja-build/ninja/releases/download/v${ninja_version}/ninja-${ninja_suffix}")
+  #       file(DOWNLOAD "${ninja_url}" ./ninja.zip SHOW_PROGRESS)
+  #       execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ninja.zip)
+  #       set(cmake_url "https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cmake-${cmake_version}-${cmake_suffix}")
+  #       file(DOWNLOAD "${cmake_url}" ./cmake.zip SHOW_PROGRESS)
+  #       execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./cmake.zip)
+  #       # Save the path for other steps
+  #       file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}/${cmake_dir}" cmake_dir)
+  #       message("cmake_dir=${cmake_dir}" >> $GITHUB_OUTPUT)
+  #       if (NOT "${{ runner.os }}" STREQUAL "Windows")
+  #         execute_process(
+  #           COMMAND chmod +x ninja
+  #           COMMAND chmod +x ${cmake_dir}/cmake
+  #         )
+  #       endif()
+  #   - name: folder creation
+  #     run: |
+  #       mkdir win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
+  #       cd win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
+  #       ls
+  #   - name: Configure
+  #     shell: cmake -P {0}
+  #     run: |
+  #       set(ENV{CC} ${{ matrix.config.cc }})
+  #       set(ENV{CXX} ${{ matrix.config.cxx }})
+  #       if ("${{ runner.os }}" STREQUAL "Windows" AND NOT "x${{ matrix.config.environment_script }}" STREQUAL "x")
+  #         execute_process(
+  #           COMMAND "${{ matrix.config.environment_script }}" && set
+  #           OUTPUT_FILE environment_script_output.txt
+  #         )
+  #         file(STRINGS environment_script_output.txt output_lines)
+  #         foreach(line IN LISTS output_lines)
+  #           if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
+  #             set(ENV{${CMAKE_MATCH_1}} "${CMAKE_MATCH_2}")
+  #           endif()
+  #         endforeach()
+  #       endif()
+  #       file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}/ninja" ninja_program)
+  #       execute_process(
+  #         COMMAND cmake
+  #           -S ${{ matrix.config.folder }}
+  #           -B win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
+  #           -D CMAKE_BUILD_TYPE=${{ matrix.config.build_type }}
+  #           -G Ninja
+  #           -D CMAKE_MAKE_PROGRAM=${ninja_program} ${{ matrix.config.option }}
+  #         RESULT_VARIABLE result
+  #       )
+  #       if (NOT result EQUAL 0)
+  #         message(FATAL_ERROR "Bad exit status")
+  #       endif()
+  #   - name: Build
+  #     shell: cmake -P {0}
+  #     run: |
+  #       set(ENV{NINJA_STATUS} "[%f/%t %o/sec] ")
+  #       if ("${{ runner.os }}" STREQUAL "Windows" AND NOT "x${{ matrix.config.environment_script }}" STREQUAL "x")
+  #         file(STRINGS environment_script_output.txt output_lines)
+  #         foreach(line IN LISTS output_lines)
+  #           if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
+  #             set(ENV{${CMAKE_MATCH_1}} "${CMAKE_MATCH_2}")
+  #           endif()
+  #         endforeach()
+  #       endif()
         
-        execute_process(
-          COMMAND cmake --build win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status")
-        endif()
+  #       execute_process(
+  #         COMMAND cmake --build win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
+  #         RESULT_VARIABLE result
+  #       )
+  #       if (NOT result EQUAL 0)
+  #         message(FATAL_ERROR "Bad exit status")
+  #       endif()
     
-    - name: ls
-      run: |
-         cd win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
-         ls
+  #   - name: ls
+  #     run: |
+  #        cd win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
+  #        ls
 
-    - name: Upload executable ${{ matrix.config.option_name }}
-      uses: actions/upload-artifact@v3
-      with:
-        name: windows_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
-        path: |
-           ./win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}/*.exe
+  #   - name: Upload executable ${{ matrix.config.option_name }}
+  #     uses: actions/upload-artifact@v3
+  #     with:
+  #       name: windows_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
+  #       path: |
+  #          ./win_build_${{ matrix.config.folder }}_${{ matrix.config.option_name }}/*.exe
         
   build_embedded_secure:
     runs-on: ubuntu-latest
@@ -164,19 +168,20 @@ jobs:
     - name: Build
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
-        chmod +x ./EXAMPLE/build_win_bin_ninja.sh
-        ./EXAMPLE/build_win_bin_ninja.sh
+        cd EXAMPLE
+        chmod +x ./build_win_bin_ninja.sh
+        ./build_win_bin_ninja.sh
     - name: Upload
       uses: actions/upload-artifact@v3
       with:
         name: embedded_secured
         path: |
            ./EXAMPLE/build_win_bin/*/*.bin
-           ./*.md
-           ./*/*.md
-           ./*/*/*.jpg
-           ./*/*/*.PNG
-           ./*/MT/*.knxproj
+           ./EXAMPLE/*.md
+           ./EXAMPLE/*/*.md
+           ./EXAMPLE/*/*/*.jpg
+           ./EXAMPLE/*/*/*.PNG
+           ./EXAMPLE/*/MT/*.knxproj
 
   build_embedded_unsecure:
     runs-on: ubuntu-latest
@@ -188,23 +193,25 @@ jobs:
     - name: Build
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
-        chmod +x ./EXAMPLE/build_win_bin_ninja_unsecured.sh
-        ./EXAMPLE/build_win_bin_ninja_unsecured.sh
+        cd EXAMPLE
+        chmod +x ./build_win_bin_ninja_unsecured.sh
+        ./build_win_bin_ninja_unsecured.sh
     - name: Upload unsecured binaries
       uses: actions/upload-artifact@v3
       with:
         name: embedded_unsecured
         path: |
-           ./build_w_b_u/*/*.bin
-           ./*.md
-           ./*/*.md
-           ./*/*/*.jpg
-           ./*/*/*.PNG
-           ./*/MT/*.knxproj
+           ./EXAMPLE/build_w_b_u/*/*.bin
+           ./EXAMPLE/*.md
+           ./EXAMPLE/*/*.md
+           ./EXAMPLE/*/*/*.jpg
+           ./EXAMPLE/*/*/*.PNG
+           ./EXAMPLE/*/MT/*.knxproj
 
   # Makes a release with everything that was built above
   makerelease:
-    needs: [build_windows, build_embedded_secure, build_embedded_unsecure]
+    # needs: [build_windows, build_embedded_secure, build_embedded_unsecure]
+    needs: [build_embedded_secure, build_embedded_unsecure]
     name: Release archives
     runs-on: ubuntu-latest
 
@@ -213,16 +220,16 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0
-        path: knx-iot-demos
+        path: knx-iot-example
     - run: |
-        cd knx-iot-demos
+        cd knx-iot-example
         git fetch --tags
 
     # Figure out what to call the release
     - name: Release info
       id: releaseinfo
       run: |
-        cd knx-iot-demos
+        cd knx-iot-example
         #echo "version=$(git describe --tags --dirty --always --long | sed -E 's/-g[0-9a-f]+//g')" >> $GITHUB_OUTPUT
         #echo "title=$(git show -s --format=%B | head -n1)" >> $GITHUB_OUTPUT #echo "version=$(git describe --tags --dirty --always --long | sed -E 's/-g[0-9a-f]+//g')" >> $GITHUB_OUTPUT
         echo "version=${{ github.event.inputs.release_tag_name }} " >> $GITHUB_OUTPUT
@@ -247,10 +254,10 @@ jobs:
         release_name: ${{ steps.releaseinfo.outputs.title }}
         body: ${{ steps.releaseinfo.outputs.msg }}
 
-    # Download all of the previously uploaded artifacts
-    - uses: actions/download-artifact@v1
-      with:
-        name: windows_PROD_secured
+    # # Download all of the previously uploaded artifacts
+    # - uses: actions/download-artifact@v1
+    #   with:
+    #     name: windows_PROD_secured
 
     # embedded
     - uses: actions/download-artifact@v1
@@ -263,20 +270,23 @@ jobs:
 
     # Zip them
     - name: Zip the release assets
+      # run: |
+      #   zip -r windows_PROD_secured.zip windows_PROD_secured
+      #   zip -r embedded_secured.zip embedded_secured
+      #   zip -r embedded_unsecured.zip embedded_unsecured
       run: |
-        zip -r windows_PROD_secured.zip windows_PROD_secured
         zip -r embedded_secured.zip embedded_secured
         zip -r embedded_unsecured.zip embedded_unsecured
 
-    - name: Release windows_PROD_secured
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{steps.create_release.outputs.upload_url}}
-        asset_path: ./windows_PROD_secured.zip
-        asset_name: windows_PROD_secured.zip
-        asset_content_type: application/zip
+    # - name: Release windows_PROD_secured
+    #   uses: actions/upload-release-asset@v1
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #   with:
+    #     upload_url: ${{steps.create_release.outputs.upload_url}}
+    #     asset_path: ./windows_PROD_secured.zip
+    #     asset_name: windows_PROD_secured.zip
+    #     asset_content_type: application/zip
 
     - name: embedded_secured
       uses: actions/upload-release-asset@v1

@@ -26,11 +26,11 @@ jobs:
         name: embedded_secured
         path: |
            ./EXAMPLE/build_win_bin/*/*.bin
-           ./*.md
-           ./*/*.md
-           ./*/*/*.jpg
-           ./*/*/*.PNG
-           ./*/MT/*.knxproj
+           ./EXAMPLE/*.md
+           ./EXAMPLE/*/*.md
+           ./EXAMPLE/*/*/*.jpg
+           ./EXAMPLE/*/*/*.PNG
+           ./EXAMPLE/*/MT/*.knxproj
 
   build_embedded_unsecure:
     runs-on: ubuntu-latest
@@ -50,11 +50,11 @@ jobs:
       with:
         name: embedded_unsecured
         path: |
-           ./build_w_b_u/*/*.bin
-           ./*.md
-           ./*/*.md
-           ./*/*/*.jpg
-           ./*/*/*.PNG
-           ./*/MT/*.knxproj
+           ./EXAMPLE/build_w_b_u/*/*.bin
+           ./EXAMPLE/*.md
+           ./EXAMPLE/*/*.md
+           ./EXAMPLE/*/*/*.jpg
+           ./EXAMPLE/*/*/*.PNG
+           ./EXAMPLE/*/MT/*.knxproj
 
         #retention-days: 5

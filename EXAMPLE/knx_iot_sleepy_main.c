@@ -369,7 +369,7 @@ int main(void)
 	// Note: we are using printf here instead of PRINT so that
 	// this information always gets printed.
 	printf("Device iid: ");
-	oc_print_uint64_t(iid);
+	oc_print_uint64_t(iid, DEC_REPRESENTATION);
     printf("\n");
 
 	printf("group publisher table:\n");

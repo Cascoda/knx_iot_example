@@ -18,19 +18,20 @@ jobs:
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
         cd EXAMPLE
-        chmod +x ./build_win_bin_ninja.sh
-        ./EXAMPLE/build_win_bin_ninja.sh
-    - name: Upload
-      uses: actions/upload-artifact@v3
-      with:
-        name: embedded_secured
-        path: |
-           ./EXAMPLE/build_win_bin/*/*.bin
-           ./*.md
-           ./*/*.md
-           ./*/*/*.jpg
-           ./*/*/*.PNG
-           ./*/MT/*.knxproj
+        ls
+    #     chmod +x ./build_win_bin_ninja.sh
+    #     ./EXAMPLE/build_win_bin_ninja.sh
+    # - name: Upload
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: embedded_secured
+    #     path: |
+    #        ./EXAMPLE/build_win_bin/*/*.bin
+    #        ./*.md
+    #        ./*/*.md
+    #        ./*/*/*.jpg
+    #        ./*/*/*.PNG
+    #        ./*/MT/*.knxproj
 
   build_embedded_unsecure:
     runs-on: ubuntu-latest
@@ -43,18 +44,19 @@ jobs:
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
         cd EXAMPLE
-        chmod +x ./EXAMPLE/build_win_bin_ninja_unsecured.sh
-        ./EXAMPLE/build_win_bin_ninja_unsecured.sh
-    - name: Upload unsecured binaries
-      uses: actions/upload-artifact@v3
-      with:
-        name: embedded_unsecured
-        path: |
-           ./build_w_b_u/*/*.bin
-           ./*.md
-           ./*/*.md
-           ./*/*/*.jpg
-           ./*/*/*.PNG
-           ./*/MT/*.knxproj
+        ls
+    #     chmod +x ./EXAMPLE/build_win_bin_ninja_unsecured.sh
+    #     ./EXAMPLE/build_win_bin_ninja_unsecured.sh
+    # - name: Upload unsecured binaries
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: embedded_unsecured
+    #     path: |
+    #        ./build_w_b_u/*/*.bin
+    #        ./*.md
+    #        ./*/*.md
+    #        ./*/*/*.jpg
+    #        ./*/*/*.PNG
+    #        ./*/MT/*.knxproj
 
         #retention-days: 5

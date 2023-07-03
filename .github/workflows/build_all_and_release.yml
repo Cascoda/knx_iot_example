@@ -2,13 +2,15 @@ name: BuildAllAndRelease
 
 on: 
   workflow_dispatch:
-    branches: [ elie-ci ]
+    branches: [ main ]
     inputs:
       release_tag_name:
         description: 'release tag name e.g. "knx_vx.y.z"'
         required: true
-  push:
-    branches: [ elie-ci ]
+  pull_request:
+    branches: [ main ]
+  # push:
+  #   branches: [ main ]
 
 # env:
 #   MATRIX: "{ 

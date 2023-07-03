@@ -19,8 +19,8 @@ jobs:
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
         cd EXAMPLE
         ls
-    #     chmod +x ./build_win_bin_ninja.sh
-    #     ./EXAMPLE/build_win_bin_ninja.sh
+        chmod +x ./build_win_bin_ninja.sh
+        ./build_win_bin_ninja.sh
     # - name: Upload
     #   uses: actions/upload-artifact@v3
     #   with:

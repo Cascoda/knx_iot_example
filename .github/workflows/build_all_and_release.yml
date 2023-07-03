@@ -9,8 +9,6 @@ on:
         required: true
   pull_request:
     branches: [ main ]
-  # push:
-  #   branches: [ main ]
 
 # env:
 #   MATRIX: "{ 
@@ -169,114 +167,114 @@ jobs:
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
         cd EXAMPLE
-    #     chmod +x ./build_win_bin_ninja.sh
-    #     ./build_win_bin_ninja.sh
-    # - name: Upload
-    #   uses: actions/upload-artifact@v3
-    #   with:
-    #     name: embedded_secured
-    #     path: |
-    #        ./EXAMPLE/build_win_bin/*/*.bin
-    #        ./EXAMPLE/*.md
-    #        ./EXAMPLE/*/*.md
-    #        ./EXAMPLE/*/*/*.jpg
-    #        ./EXAMPLE/*/*/*.PNG
-    #        ./EXAMPLE/*/MT/*.knxproj
+        chmod +x ./build_win_bin_ninja.sh
+        ./build_win_bin_ninja.sh
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: embedded_secured
+        path: |
+           ./EXAMPLE/build_win_bin/*/*.bin
+           ./EXAMPLE/*.md
+           ./EXAMPLE/*/*.md
+           ./EXAMPLE/*/*/*.jpg
+           ./EXAMPLE/*/*/*.PNG
+           ./EXAMPLE/*/MT/*.knxproj
 
-  # build_embedded_unsecure:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - name: install ninja
-  #     run: |
-  #       sudo apt-get -y install ninja-build
-  #   - name: Build
-  #     run: |
-  #       curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
-  #       cd EXAMPLE
-  #       chmod +x ./build_win_bin_ninja_unsecured.sh
-  #       ./build_win_bin_ninja_unsecured.sh
-  #   - name: Upload unsecured binaries
-  #     uses: actions/upload-artifact@v3
-  #     with:
-  #       name: embedded_unsecured
-  #       path: |
-  #          ./EXAMPLE/build_w_b_u/*/*.bin
-  #          ./EXAMPLE/*.md
-  #          ./EXAMPLE/*/*.md
-  #          ./EXAMPLE/*/*/*.jpg
-  #          ./EXAMPLE/*/*/*.PNG
-  #          ./EXAMPLE/*/MT/*.knxproj
+  build_embedded_unsecure:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: install ninja
+      run: |
+        sudo apt-get -y install ninja-build
+    - name: Build
+      run: |
+        curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
+        cd EXAMPLE
+        chmod +x ./build_win_bin_ninja_unsecured.sh
+        ./build_win_bin_ninja_unsecured.sh
+    - name: Upload unsecured binaries
+      uses: actions/upload-artifact@v3
+      with:
+        name: embedded_unsecured
+        path: |
+           ./EXAMPLE/build_w_b_u/*/*.bin
+           ./EXAMPLE/*.md
+           ./EXAMPLE/*/*.md
+           ./EXAMPLE/*/*/*.jpg
+           ./EXAMPLE/*/*/*.PNG
+           ./EXAMPLE/*/MT/*.knxproj
 
   # Makes a release with everything that was built above
-  # makerelease:
-  #   # needs: [build_windows, build_embedded_secure, build_embedded_unsecure]
-  #   needs: [build_embedded_secure, build_embedded_unsecure]
-  #   name: Release archives
-  #   runs-on: ubuntu-latest
+  makerelease:
+    # needs: [build_windows, build_embedded_secure, build_embedded_unsecure]
+    needs: [build_embedded_secure, build_embedded_unsecure]
+    name: Release archives
+    runs-on: ubuntu-latest
 
-  #   # Checkout the code, and fetch all tags (for version)
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #     with:
-  #       fetch-depth: 0
-  #       path: knx-iot-example
-  #   - run: |
-  #       cd knx-iot-example
-  #       git fetch --tags
+    # Checkout the code, and fetch all tags (for version)
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        path: knx-iot-example
+    - run: |
+        cd knx-iot-example
+        git fetch --tags
 
-  #   # Figure out what to call the release
-  #   - name: Release info
-  #     id: releaseinfo
-  #     run: |
-  #       cd knx-iot-example
-  #       #echo "version=$(git describe --tags --dirty --always --long | sed -E 's/-g[0-9a-f]+//g')" >> $GITHUB_OUTPUT
-  #       #echo "title=$(git show -s --format=%B | head -n1)" >> $GITHUB_OUTPUT #echo "version=$(git describe --tags --dirty --always --long | sed -E 's/-g[0-9a-f]+//g')" >> $GITHUB_OUTPUT
-  #       echo "version=${{ github.event.inputs.release_tag_name }} " >> $GITHUB_OUTPUT
-  #       #echo "title=$(git show -s --format=%B | head -n1)" >> $GITHUB_OUTPUT
-  #       echo "title=${{ github.event.inputs.release_tag_name }}" >> $GITHUB_OUTPUT
+    # Figure out what to call the release
+    - name: Release info
+      id: releaseinfo
+      run: |
+        cd knx-iot-example
+        echo "version=$(git describe --tags --dirty --always --long | sed -E 's/-g[0-9a-f]+//g')" >> $GITHUB_OUTPUT
+        echo "title=$(git show -s --format=%B | head -n1)" >> $GITHUB_OUTPUT #echo "version=$(git describe --tags --dirty --always --long | sed -E 's/-g[0-9a-f]+//g')" >> $GITHUB_OUTPUT
+        # echo "version=${{ github.event.inputs.release_tag_name }} " >> $GITHUB_OUTPUT
+        echo "title=$(git show -s --format=%B | head -n1)" >> $GITHUB_OUTPUT
+        # echo "title=${{ github.event.inputs.release_tag_name }}" >> $GITHUB_OUTPUT
 
-  #       msg=$(git show -s --format=%B)
-  #       #escape special chars
-  #       msg="${msg//'%'/'%25'}"
-  #       msg="${msg//$'\n'/'%0A'}"
-  #       msg="${msg//$'\r'/'%0D'}"
-  #       echo "msg=$msg" >> $GITHUB_OUTPUT
+        msg=$(git show -s --format=%B)
+        #escape special chars
+        msg="${msg//'%'/'%25'}"
+        msg="${msg//$'\n'/'%0A'}"
+        msg="${msg//$'\r'/'%0D'}"
+        echo "msg=$msg" >> $GITHUB_OUTPUT
 
-    # Create a release to publish to
-    # - name: Create Release
-    #   id: create_release
-    #   uses: actions/create-release@v1
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #   with:
-    #     tag_name: ${{ steps.releaseinfo.outputs.version }}
-    #     release_name: ${{ steps.releaseinfo.outputs.title }}
-    #     body: ${{ steps.releaseinfo.outputs.msg }}
+    Create a release to publish to
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.releaseinfo.outputs.version }}
+        release_name: ${{ steps.releaseinfo.outputs.title }}
+        body: ${{ steps.releaseinfo.outputs.msg }}
 
-    # # Download all of the previously uploaded artifacts
+    # Download all of the previously uploaded artifacts
     # - uses: actions/download-artifact@v1
     #   with:
     #     name: windows_PROD_secured
 
     # embedded
-    # - uses: actions/download-artifact@v1
-    #   with:
-    #     name: embedded_secured
+    - uses: actions/download-artifact@v1
+      with:
+        name: embedded_secured
 
-    # - uses: actions/download-artifact@v1
-    #   with:
-    #     name: embedded_unsecured
+    - uses: actions/download-artifact@v1
+      with:
+        name: embedded_unsecured
 
     # Zip them
-    # - name: Zip the release assets
+    - name: Zip the release assets
       # run: |
       #   zip -r windows_PROD_secured.zip windows_PROD_secured
       #   zip -r embedded_secured.zip embedded_secured
       #   zip -r embedded_unsecured.zip embedded_unsecured
-      # run: |
-      #   zip -r embedded_secured.zip embedded_secured
-      #   zip -r embedded_unsecured.zip embedded_unsecured
+      run: |
+        zip -r embedded_secured.zip embedded_secured
+        zip -r embedded_unsecured.zip embedded_unsecured
 
     # - name: Release windows_PROD_secured
     #   uses: actions/upload-release-asset@v1
@@ -288,21 +286,21 @@ jobs:
     #     asset_name: windows_PROD_secured.zip
     #     asset_content_type: application/zip
 
-    # - name: embedded_secured
-    #   uses: actions/upload-release-asset@v1
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #   with:
-    #     upload_url: ${{steps.create_release.outputs.upload_url}}
-    #     asset_path: ./embedded_secured.zip
-    #     asset_name: embedded_secured.zip
-    #     asset_content_type: application/zip
-    # - name: embedded_unsecured
-    #   uses: actions/upload-release-asset@v1
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #   with:
-    #     upload_url: ${{steps.create_release.outputs.upload_url}}
-    #     asset_path: ./embedded_unsecured.zip
-    #     asset_name: embedded_unsecured.zip
-    #     asset_content_type: application/zip
+    - name: embedded_secured
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{steps.create_release.outputs.upload_url}}
+        asset_path: ./embedded_secured.zip
+        asset_name: embedded_secured.zip
+        asset_content_type: application/zip
+    - name: embedded_unsecured
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{steps.create_release.outputs.upload_url}}
+        asset_path: ./embedded_unsecured.zip
+        asset_name: embedded_unsecured.zip
+        asset_content_type: application/zip

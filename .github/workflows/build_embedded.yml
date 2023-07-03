@@ -43,7 +43,7 @@ jobs:
       run: |
         curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
         cd EXAMPLE
-        chmod +x ./EXAMPLE/build_win_bin_ninja_unsecured.sh
+        chmod +x ./build_win_bin_ninja_unsecured.sh
         ./build_win_bin_ninja_unsecured.sh
     - name: Upload unsecured binaries
       uses: actions/upload-artifact@v3

@@ -36,7 +36,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
-// 2023-06-29 16:25:53.540698
+// 2023-07-04 14:38:09.544735
 
 // For compilers that support precompilation, includes "wx/wx.h".
 #include <wx/wxprec.h>
@@ -890,7 +890,7 @@ void MyFrame::OnAbout(wxCommandEvent& event)
   strcat(text, "\n");
   
   strcat(text, "(c) Cascoda Ltd\n");
-  strcat(text, "2023-06-29 16:25:53.540698");
+  strcat(text, "2023-07-04 14:38:09.544735");
   CustomDialog("About", text);
 }
 

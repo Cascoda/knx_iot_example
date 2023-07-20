@@ -1,4 +1,4 @@
-# The Application
+# The Applications
 This application is a KNX IoT Example application.
 
 IMPORTANT: Please note that by default, every KNX device running this application will have the same KNX serial number.

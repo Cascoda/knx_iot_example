@@ -63,6 +63,7 @@
 #include "port/oc_clock.h"
 #include "port/oc_log.h"
 #include "port/dns-sd.h"
+#include "security/oc_spake2plus.h"
 #include "manufacturer_storage.h"
 #include "oc_api.h"
 #include "oc_buffer_settings.h"
@@ -340,6 +341,41 @@ int main(void)
 				 sn[5]);
 		app_set_serial_number(serial_number_str);
 	}
+	
+#ifdef OC_SPAKE
+	char pwd[33];
+	error = knx_get_stored_password(pwd);
+	if (error)
+	{
+		PRINT_APP("Error: Stored password not found! Using default value...\n");
+		PRINT_APP(
+			"Please create the data file using knx-gen-data and flash it with chilictl in order to fix this issue.\n");
+	}
+	else
+	{
+		oc_spake_set_password(pwd);
+	}
+	
+	uint8_t salt[32], rand[32];
+	uint32_t it;
+	mbedtls_mpi w0;
+	mbedtls_ecp_point L;
+	mbedtls_mpi_init(&w0);
+	mbedtls_ecp_point_init(&L);
+	error = knx_get_stored_spake(salt, rand, &it, &w0, &L);
+	if (error)
+	{
+		PRINT_APP("Error: Stored spake record not found! Using runtime generated values\n");
+		PRINT_APP(
+			"Please create the data file using knx-gen-data and flash it with chilictl in order to fix this issue.\n");
+	}
+	else
+	{
+		oc_spake_set_parameters(rand, salt, it, w0, L);
+		mbedtls_mpi_free(&w0);
+		mbedtls_ecp_point_free(&L);
+	}
+#endif
 
 	/* set the application callbacks */
 	oc_set_hostname_cb(hostname_cb, NULL);

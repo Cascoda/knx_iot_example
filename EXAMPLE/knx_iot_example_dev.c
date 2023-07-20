@@ -193,7 +193,7 @@ void actuator_test_init();
 void put_callback(char* url){
   if (strcmp(url, URL_LED_1) == 0) {
     /* update led */ 
-    DVBD_SetLED(LSAB_LED, !app_retrieve_bool_variable(URL_LED_1));
+    DVBD_SetLED(LSAB_LED, !*app_get_DPT_Switch_variable(URL_LED_1, NULL));
   }
 }
 

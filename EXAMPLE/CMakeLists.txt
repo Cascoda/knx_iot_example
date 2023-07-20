@@ -36,8 +36,13 @@ project(knx_iot_example  C CXX ASM)
 
 include(FetchContent)
 
-#set(CASCODA_REPO cascoda-sdk-priv)
-set(CASCODA_REPO cascoda-sdk)
+option(CASCODA_USE_PRIVATE_SDK "" OFF)
+
+if(CASCODA_USE_PRIVATE_SDK)
+  set(CASCODA_REPO cascoda-sdk-priv)
+else()
+  set(CASCODA_REPO cascoda-sdk)
+endif()
 
 # STACK on GitHub
 FetchContent_Declare(
@@ -187,6 +192,8 @@ else()
     target_compile_definitions(knx_iot_example_reed PRIVATE NO_MAIN)
     
     target_compile_definitions(knx_iot_example_sleepy PRIVATE NO_MAIN SLEEPY)
+
+
     
     # Set the size of the stack and the heap, respectively
     cascoda_configure_memory(knx_iot_example_ed 0x1500 0xc000)

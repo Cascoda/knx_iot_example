@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.18)
 project(knx_iot_demos)
 
-set(CASCODA_REPO cascoda-sdk)
+option(CASCODA_USE_PRIVATE_SDK "" OFF)
+
+if(CASCODA_USE_PRIVATE_SDK)
+  set(CASCODA_REPO cascoda-sdk-priv)
+else()
+  set(CASCODA_REPO cascoda-sdk)
+endif()
 
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
   add_custom_target(copy-ldrom ALL DEPENDS ldrom_hid)

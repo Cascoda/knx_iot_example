@@ -36,7 +36,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
-// 2023-06-29 16:25:53.540698
+// 2023-07-17 12:01:52.801592
 
 // For compilers that support precompilation, includes "wx/wx.h".
 #include <wx/wxprec.h>
@@ -711,22 +711,27 @@ void MyFrame::OnParameterList(wxCommandEvent& event)
       sprintf(line, "  name: '%s'  ", app_get_parameter_name(index));
       strcat(text, line);
     }
-    if (app_is_bool_url(url)) {
-      sprintf(line, "  value : '%d'  ", app_retrieve_bool_variable(url));
+    if (app_is_DPT_Switch_url(url)) {
+      DPT_Switch param_value;
+      app_get_DPT_Switch_variable(url, &param_value);
+
+      sprintf(line, "  value : '%d'  ", param_value);
       strcat(text, line);
+      if (!param_value) {
+        sprintf(line, " (%s) ", "Off");
+        strcat(text, line);
+      }
+      if (param_value) {
+        sprintf(line, " (%s) ", "On");
+        strcat(text, line);
+      }
     }
-    if (app_is_int_url(url)) {
-      sprintf(line, "  value : '%d'  ", app_retrieve_int_variable(url));
-      strcat(text, line);
-    }
-    if (app_is_double_url(url)) {
-      sprintf(line, "  value : '%f'  ", (float)app_retrieve_double_variable(url));
-      strcat(text, line);
-    }
-    if (app_is_string_url(url)) {
-      sprintf(line, "  value : '%s'  ", app_retrieve_string_variable(url));
-      strcat(text, line);
-    }
+    
+    
+    //if (app_is_string_url(url)) {
+    //  sprintf(line, "  value : '%s'  ", app_retrieve_string_variable(url));
+    //  strcat(text, line);
+    //}
     index++;
     url = app_get_parameter_url(index);
   }
@@ -890,7 +895,7 @@ void MyFrame::OnAbout(wxCommandEvent& event)
   strcat(text, "\n");
   
   strcat(text, "(c) Cascoda Ltd\n");
-  strcat(text, "2023-06-29 16:25:53.540698");
+  strcat(text, "2023-07-17 12:01:52.801592");
   CustomDialog("About", text);
 }
 
@@ -946,8 +951,8 @@ void MyFrame::OnTimer(wxTimerEvent& event)
 void  MyFrame::updateInfoCheckBoxes()
 {
   bool p;
-  p = app_retrieve_bool_variable("/p/o_1_1"); // set toggle of LED_1
-  m_LED_1->SetValue(p); 
+  p = *app_get_DPT_Switch_variable("/p/o_1_1", NULL); // set toggle of LED_1
+  m_LED_1->SetValue(p);
 
 }
 
@@ -1098,24 +1103,20 @@ void  MyFrame::updateInfoButtons()
   bool p;
   int p_int;
   double d;
-  p = app_retrieve_bool_variable("/p/o_1_1"); // set button text of LED_1
-  strcpy(text, "LED_1 ('/p/o_1_1')");
-  this->bool2text(p, text);
-  m_LED_1->SetLabel(text); 
 
 }
 void MyFrame::OnPressed_PB_1(wxCommandEvent& event)
 {
   char url[] = "/p/o_2_2";
   char my_text[100];
-  bool p = app_retrieve_bool_variable(url);
+  bool p = (bool)*app_get_DPT_Switch_variable(url, NULL);
   if (p == true) {
     p = false;
   }
   else {
     p = true;
   }
-  app_set_bool_variable(url, p);
+  app_set_DPT_Switch_variable(url, (DPT_Switch*)&p);
   oc_do_s_mode_with_scope(2, url, "w");
   oc_do_s_mode_with_scope(5, url, "w");
   sprintf(my_text, "PB_1 ('%s') pressed: %d", url, (int)p);

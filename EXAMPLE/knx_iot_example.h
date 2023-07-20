@@ -59,6 +59,9 @@ extern "C" {
 #define URL_LED_1 "/p/o_1_1" // define URL LED_1 for /p/o_1_1
 #define URL_PB_1 "/p/o_2_2" // define URL PB_1 for /p/o_2_2
 
+
+typedef bool DPT_Switch;
+
 /**
  * Callback invoked by the stack when a successfull put is done
  *
@@ -98,115 +101,78 @@ int app_initialize_stack();
  * @return int 0 == success
  */
 int app_set_serial_number(char* serial_number);
+// Getters/Setters for DPT_Switch
+/**
+ * @brief Checks if the url depicts a DPT_Switch
+ * 
+ * @param url the url 
+ * @return true: url conveys a DPT_Switch
+ */
+bool app_is_DPT_Switch_url(char* url);
 
 /**
- * @brief checks if the url depicts an boolean
+ * @brief Set a DPT_Switch
  * 
- * @param url the url to check
- * @return true: url conveys a boolean
+ * @param url the url for the DPT_Switch to set
+ * @param in a pointer to the DPT_Switch to copy
+ * Can be the global variable itself
+ */
+void app_set_DPT_Switch_variable(char* url, const DPT_Switch* in);
+
+/**
+ * @brief Get a DPT_Switch
+ * 
+ * @param url the url for the DPT_Switch to get
+ * @param out a pointer to the DPT_Switch to copy out to
+ * If NULL, won't copy but return the global variable
+ * @return pointer to the (copied) DPT_Switch
+ * If out is NULL then the global variable for url
+ * otherwise will return out
+ */
+DPT_Switch* app_get_DPT_Switch_variable(char *url, DPT_Switch* out);
+
+/**
+ * @brief Parse a DPT_Switch from oc_rep_t
+ * 
+ * @param rep The oc_rep_t* from which to parse
+ * @param out The DPT_Switch to store into
+ * @return true: successfully parsed DPT_Switch
+ */
+bool oc_parse_DPT_Switch(oc_rep_t *rep, DPT_Switch *out);
+
+/**
+ * @brief Encode a DPT_Switch using oc_rep
+ * 
+ * @param in The DPT_Switch to encode
+ */
+void oc_encode_DPT_Switch(const DPT_Switch *in);
+
+
+// Getters/Setters for bool
+/**
+ * @brief Checks if the url depicts a bool
+ * 
+ * @param url the url 
+ * @return true: url conveys a bool
  */
 bool app_is_bool_url(char* url);
 
 /**
- * @brief retrieve the boolean variable of the url/data point
- * the caller needs to know if the resource/data point is conveying a boolean
- * "/p/o_1_1" of LED_1 
- * "/p/o_2_2" of PB_1 
+ * @brief Set a bool
  * 
- * @param url the url of the resource/data point
- * @return true value is true
- * @return false value is false or error.
- */
-bool app_retrieve_bool_variable(char* url);
-
-/**
- * @brief set the boolean variable that belongs to the url 
- * The caller needs to know if the resource/data point is conveying a boolean
- * "/p/o_1_1" of LED_1
- * 
- * @param url the url of the resource/data point
- * @param value the boolean value to be set
+ * @param url the url for the bool to set
+ * @param in value to set
  */
 void app_set_bool_variable(char* url, bool value);
 
 /**
- * @brief checks if the url depicts an int
+ * @brief Get a bool
  * 
- * @param url the url to check
- * @return true: url conveys a int
+ * @param url the url for the bool to get
+ * @return boolean variable
  */
-bool app_is_int_url(char* url);
-
-/**
- * @brief retrieve the int variable of the url/data point
- * the caller needs to know if the resource/data point is conveying a integer
- * 
- * @param url the url of the resource/data point
- * @return the integer value of the global variable
- */
-int app_retrieve_int_variable(char* url);
-
-/**
- * @brief set the integer variable that belongs to the url 
- * The caller needs to know if the resource/data point is conveying a integer
- * 
- * @param url the url of the resource/data point
- * @param value the integer value to be set
- */
+bool app_retrieve_bool_variable(char *url);
  
-void app_set_int_variable(char* url, int value);
-
-void app_set_integer_variable(char* url, int value);
-
-/**
- * @brief checks if the url depicts an double
- * 
- * @param url the url to check
- * @return true: url conveys a double
- */
-bool app_is_double_url(char* url);
-
-/**
- * @brief retrieve the double variable of the url/data point
- * the caller needs to know if the resource/data point is conveying a integer
- * 
- * @param url the url of the resource/data point
- * @return the double value of the global variable
- */
-double app_retrieve_double_variable(char* url);
-
-/**
- * @brief set the double variable that belongs to the url 
- * The caller needs to know if the resource/data point is conveying a double
- * 
- * @param url the url of the resource/data point
- * @param value the double value to be set
- */
-void app_set_double_variable(char* url, double value);
-
-/**
- * @brief function to check if the url is represented by a string
- *
- * @param url the url value is a string
- * @return true = url returns a string, false = url is not a string
- */
-bool app_is_string_url(char* url);
-
-/**
- * @brief sets the global string variable at the url
- *
- * @param url the url indicating the global variable
- * @param value the string value to be set
- */
-void app_set_string_variable(char* url, char* value);
-
-/**
- * @brief retrieve the global string variable at the url
- *
- * @param url the url indicating the global variable
- * @return the value of the variable
- */
-char* app_retrieve_string_variable(char* url);
 
 /**
  * @brief checks if the url represents a parameter

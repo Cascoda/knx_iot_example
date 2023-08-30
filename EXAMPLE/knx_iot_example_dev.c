@@ -99,8 +99,11 @@ extern otInstance *OT_INSTANCE;
  * @return true value is true
  * @return false value is false or error.
  */
-bool app_retrieve_fault_variable(char* url);
-// application specific includes
+bool app_retrieve_fault_variable(const char* url);
+
+
+
+
 #include "api/oc_knx_dev.h"
 #include "devboard_btn.h"
 #include "cascoda-util/cascoda_tasklet.h"
@@ -144,9 +147,6 @@ enum reset_button_state
 // FORWARD DECLARATIONS
 // ===============================
 
-
-
-// application generic
 static void init_globals(void)
 {
   // Not implemented for now
@@ -157,7 +157,11 @@ static void lssb_button_pressed(void *context)
 {
   (void)context;
   PRINT_APP("LSSB button pressed\n");
-  dev_btn_toggle_cb(URL_PB_1);
+  DPT_Switch sw;
+  app_get_DPT_Switch_variable(URL_PB_1, &sw);
+  sw = !sw; //invert
+  app_set_DPT_Switch_variable(URL_PB_1, &sw);
+  oc_do_s_mode_with_scope(5, URL_PB_1, "w");
 }
 
 //
@@ -190,10 +194,10 @@ void actuator_test_init();
  *
  * @param url the url that received a PUT invocation.
  */
-void put_callback(char* url){
+void put_callback(const char* url){
   if (strcmp(url, URL_LED_1) == 0) {
     /* update led */ 
-    DVBD_SetLED(LSAB_LED, !app_retrieve_bool_variable(URL_LED_1));
+    DVBD_SetLED(LSAB_LED, !*app_get_DPT_Switch_variable(URL_LED_1, NULL));
   }
 }
 
@@ -227,6 +231,10 @@ static void reset_hold_cb(void *context)
 
       // Do the actual reset
       oc_reset_device(THIS_DEVICE, RESET_VALUE);
+      const char *url = NULL;
+      for (int i = 0; url = app_get_parameter_url(i); i++) {
+        oc_storage_erase(url);
+      }
 
       // Give feedback to the user that reset is done (so they know when to release the button)
       state_snapshot = KNX_RESET;
@@ -444,6 +452,7 @@ void reset_embedded(size_t device_index, int reset_value, void *data)
  */
 static void programming_mode_init(dvbd_led_btn flashing_led, dvbd_led_btn program_mode_button)
 {
+#if !FAKE_SENSOR_DATA
   // The flashing LED and the button used to put the device in programming mode must be different
   if (flashing_led == program_mode_button)
     return;
@@ -462,6 +471,7 @@ static void programming_mode_init(dvbd_led_btn flashing_led, dvbd_led_btn progra
 
   // Set the device in programming mode when the program_mode_button is short-pressed
   DVBD_SetButtonShortPressCallback(program_mode_button, &prog_mode_short_press_cb, NULL, BTN_SHORTPRESS_RELEASED);
+#endif
 }
 
 /**
@@ -493,12 +503,13 @@ restart_cb(size_t device_index, void *data)
  */
 static void knx_specific_init()
 {
+#if !FAKE_SENSOR_DATA
   // Allows device to enter programming mode when button is pressed
   programming_mode_init(PROGRAMMING_MODE_INDICATOR, TRIGGER_FOR_PROGRAMMING_MODE_AND_RESET);
 
   // Allows device to be reset when button is held down
   reset_init(TRIGGER_FOR_PROGRAMMING_MODE_AND_RESET);
-  
+#endif
   // Allow the device to be restarted 
   oc_set_restart_cb(restart_cb, NULL);
 }
@@ -599,7 +610,7 @@ void hardware_poll()
   DVBD_PollButtons();
 }
 
-bool app_is_url_in_use(char* url)
+bool app_is_url_in_use(const char* url)
 {
    int index;
    oc_string_t oc_str;
@@ -636,9 +647,6 @@ ca_error actuator_test(void *context)
   (void)context;
   static bool bvalue = true;
   static int ivalue = 0;
-  app_set_bool_variable("/p/o_1_1", bvalue);
-  put_callback("/p/o_1_1");
-  bvalue = !bvalue;
   TASKLET_ScheduleDelta(&g_test_tasklet, 3000, NULL);
 }
 

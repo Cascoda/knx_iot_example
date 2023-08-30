@@ -1,5 +1,5 @@
-# The Application
-This application is a KNX IoT Example application.
+# The Applications
+This application is a KNX IoT Example application, running on Cascoda's Development Board.
 
 IMPORTANT: Please note that by default, every KNX device running this application will have the same KNX serial number.
 This makes it impossible to differentiate the devices from each other, and thus impossible to link two (or more) of these togehter, and have a working demo.
@@ -31,50 +31,17 @@ The following applications are in this folder:
 
 CLI:
 
-- knx_iot_example Application (CLI) using the following files:
-  - knx_iot_example.c
-  - knx_iot_example.h
+- knx_iot_example Application (CLI) 
 
 Windows GUI using WxWidgets:
 
-- knx_iot_example_gui Application (wxWidgets) using the following files:
-  - knx_iot_example.c
-  - knx_iot_example.h
-  - knx_iot_example.cpp
+- knx_iot_example_gui Application (wxWidgets)
 
 Embedded for Chili:
 
-- knx_iot_example Application (embedded) using the following files:
-  - knx_iot_example.c
-  - knx_iot_example_dev.c
-  - knx_iot_example.h
-which needs the Cascoda SDK to build.
+- knx_iot_example Application (embedded) 
 
 The general structure of these programs are:
-
-```
-   __________________
-  | Application CODE |   <---- WxWidget, Printf, hardware connection
-  |__________________|
-  |  POINT API CODE  |   <---- Generic code handling all Point API CoAP code
-  |__________________|
-  |      STACK       |   <---- Generic The KNX IoT Point API Stack (other repo)
-  |__________________|
-
-  General structure
-```
-
-The Point API Code is shared code between the different applications
-it implementes the datapoint resources.
-
-The point code has an API so that one can:
-
-- Set/retrieve data from an URL
-- Callback on PUT data changes
-- Functions to figure out what type of data the url conveys
-
-These functions then can be used to add the functionallity for
-handling the GUI (wxWidgets) and embedded (chili) to connect to the hardware.
 
 ## The knx_iot_example Application
 
@@ -84,12 +51,18 @@ handling the GUI (wxWidgets) and embedded (chili) to connect to the hardware.
 - password : 4N6AFK6T83YWDUTW23U2
 - QR info : KNX:S:00FA10010710;P:4N6AFK6T83YWDUTW23U2
 
+- manufactorer : 
+- model : dev board example
+- hardware_type : 000001
+- hardware version : [0, 1, 3]
+- firmware version : [0, 1, 3]
+
 ### Data points
 
 | url  | channel/usage       | instance |resource type | interface type | data type |
 |------| --------------------| -------- | -------------| ---------------|-----------|
-| "/p/o_1_1"  | LED_1 |  1 |urn:knx:dpa.417.52 | if.a |bool |
-| "/p/o_2_2"  | PB_1 |  1 |urn:knx:dpa.421.61 | if.s |bool |
+| "/p/o_1_1"  | LED_1 |  1 |urn:knx:dpa.417.52 | if.a | |
+| "/p/o_2_2"  | PB_1 |  1 |urn:knx:dpa.421.61 | if.s | |
 
 ### Parameters
 
@@ -126,98 +99,4 @@ For querying the metadata items implemented one can use the following commands:
 | U20 (SW2)   | 1-2     | LED (LSAB)  |
 | U25 (SW3)   | 1-2     | Programming mode and reset LED indicator |
 | U26 (SW4)   | 1-2     | Programming mode/reset button |
-
-## Building on Windows
-
-From the top level folder of the project execute:
-
-- mkdir build
-- cd build
-- cmake ..
-  - this command retrieves the dependencies from github
-- open solution (sln) created in the build folder with visual studio
-- build the applications in visual studio
-
-To use knx gitlab as source of the KNX-IOT-STACK use the following command:
-
-- cmake .. -DUSE_GITLAB=true
-
-scripts available:
-
-- build.sh , building unsecured version in folder build
-- build_secured.sh , building secured version in folder build_secured
-
-Note that one has to have access to the knx gitlab repo.
-
-## Building on Linux
-
-Note: the GUI variant is not available on Linux, only CLI will be build
-
-From the top level folder of the project execute:
-
-- mkdir build_Linux
-- cd build_Linux
-- cmake ..
-  - this command retrieves the dependencies from github
-- make
-
-To use knx gitlab as source of the KNX-IOT-STACK use the following command:
-
-- cmake .. -DUSE_GITLAB=true
-
-Note that one has to have access to the knx gitlab repo.
-
-## Building Embedded for the Chili
-
-### For Linux
-
-```bash
-mkdir build
-cd build/
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../arm_gcc_m2351.cmake || make
-```
-
-To save time on subsequent incremental builds, you may simply run `make` inside your build directory.
-
-### On Windows
-
-#### Installation of Tool chain
-
-Run the following within an ADMIN Powershell window in order to set up the Chocolatey package manager:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
-```
-
-Then, also in an ADMIN Powershell window, allow the execution of local scripts & install the toolchain using Choco.
-```powershell
-Set-ExecutionPolicy RemoteSigned
-.\install-toolchain.ps1
-```
-
-#### Configure and build
-
-Finally, set up the build directory & compile your binaries.
-
-```powershell
-# using ninja on windows (secured)
-.\build_win_bin_ninja
-# using ninja on windows (unsecured)
-.\build_win_bin_ninja_unsecured
-# using mingw on windows (secured)
-.\build_win_bin_mingw
-```
-
-On subsequent builds, you only need to run `Ninja` (or make) inside your build directory.
-
-## Example Binaries
-
-Once the build completes, you will find `knx_iot_example.bin` inside your `build_win_bin/` directory. 
-You must then flash the binary. 
-This can be done via USB, with a programmer (J-Link / NuLink) or via Over-the-Air Software Update. 
-See the [Flashing Guide](https://github.com/Cascoda/cascoda-sdk/blob/master/docs/guides/flashing.md) for a detailed how-to.
-
-
-***
-
 

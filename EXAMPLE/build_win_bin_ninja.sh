@@ -33,11 +33,12 @@
 
 
 # build script for creating a binary for the dev board
-# on windows using the ninja toolchain
+# on windows/linux using the ninja toolchain
+echo "using Ninja"
 
 mkdir -p build_win_bin
 cd build_win_bin
-# create the make files for windows
+# create the make files for Windows/Linux
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=../arm_gcc_m2351.cmake -DOC_OSCORE_ENABLED=ON \
       -DOC_DNS_SD_ENABLED=ON -DOC_PRINT_ENABLED=OFF -DOC_PRINT_APP_ENABLED=OFF
 cmake .

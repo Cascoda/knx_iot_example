@@ -36,34 +36,65 @@ project(knx_iot_example  C CXX ASM)
 
 include(FetchContent)
 
-#set(CASCODA_REPO cascoda-sdk-priv)
-set(CASCODA_REPO cascoda-sdk)
+option(CASCODA_USE_PRIVATE_SDK "" OFF)
 
-# STACK on GitHub
-FetchContent_Declare(
-    knx-iot-stack
-    GIT_REPOSITORY https://github.com/KNX-IOT/KNX-IOT-STACK.git
-    GIT_TAG master
-    #GIT_TAG dev_2
-)
+if(CASCODA_USE_PRIVATE_SDK)
+  set(CASCODA_REPO cascoda-sdk-priv)
+else()
+  set(CASCODA_REPO cascoda-sdk)
+endif()
 
-# STACK on GitLab
+if(DEFINED ENV{CASCODA_SDK_REF})
+  set(CASCODA_SDK_REF $ENV{CASCODA_SDK_REF} CACHE STRING "")
+else()
+  set(CASCODA_SDK_REF master CACHE STRING "")
+endif()
+
+if(DEFINED ENV{CASCODA_SDK_REPO})
+  set(CASCODA_SDK_REPO $ENV{CASCODA_SDK_REPO} CACHE STRING "")
+else()
+  set(CASCODA_SDK_REPO https://github.com/Cascoda/${CASCODA_REPO}.git CACHE STRING "")
+endif()
+
+
+if(USE_GITLAB)
+  set(KNX_REPO knx-iot-stack-gitlab)
+  set(KNX_REPO_URL https://gitlab.knx.org/shared-projects/knx-iot-point-api-public-stack/)
+else()
+  set(KNX_REPO knx-iot-stack)
+  set(KNX_REPO_URL https://github.com/KNX-IOT/KNX-IOT-STACK.git)
+endif()
+
+if(DEFINED ENV{KNX_IOT_STACK_REF})
+  set(KNX_IOT_STACK_REF $ENV{KNX_IOT_STACK_REF} CACHE STRING "")
+else()
+  set(KNX_IOT_STACK_REF master CACHE STRING "")
+endif()
+
+if(DEFINED ENV{KNX_IOT_STACK_REPO})
+  set(KNX_IOT_STACK_REPO $ENV{KNX_IOT_STACK_REPO} CACHE STRING "")
+else()
+  set(KNX_IOT_STACK_REPO ${KNX_REPO_URL} CACHE STRING "")
+endif()
+
+set(USE_GITLAB OFF CACHE BOOL "use gitlab as source for KNX IoT Stack")
+
+# KNX IoT Stack
 FetchContent_Declare(
-    knx-iot-stack-gitlab
-    GIT_REPOSITORY https://gitlab.knx.org/knxiot/knx-iot-point-api-open-stack.git
-    GIT_TAG master
+    ${KNX_REPO}
+    GIT_REPOSITORY ${KNX_IOT_STACK_REPO}
+    GIT_TAG ${KNX_IOT_STACK_REF}
 )
 
 # STACK + Port Cascoda
 FetchContent_Declare(
     ${CASCODA_REPO}
-    GIT_REPOSITORY https://github.com/Cascoda/${CASCODA_REPO}.git
-    GIT_TAG master
+    GIT_REPOSITORY ${CASCODA_SDK_REPO}
+    GIT_TAG ${CASCODA_SDK_REF}
 )
 
 if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
 
-    set(USE_GITLAB OFF CACHE BOOL "use gitlab as source for KNX IoT Stack")
     set(USE_CONSOLE OFF CACHE BOOL "use console (for output logging)")
 
     if(MSVC)
@@ -72,22 +103,10 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
 
     message(STATUS "This project is build for Linux/Windows")
 
-    if(USE_GITLAB)
-      # compile in the knx iot Router code from the stack
-      set(OC_IOT_ROUTER_ENABLED ON CACHE BOOL "" FORCE)
-     FetchContent_MakeAvailable(knx-iot-stack-gitlab)
-    if (knx-iot-stack-gitlab_POPULATED)
-      add_subdirectory(${knx-iot-stack-gitlab_SOURCE_DIR}   ${knx-iot-stack-gitlab_BINARY_DIR})
-    endif()
-    else()
-      option(wxBUILD_SHARED "" OFF)
-      # compile in the knx iot Router code from the stack
-      set(OC_IOT_ROUTER_ENABLED ON CACHE BOOL "" FORCE)
-      FetchContent_MakeAvailable(knx-iot-stack)
-      if (knx-iot-stack-gitlab_POPULATED)
-        add_subdirectory(${knx-iot-stack_SOURCE_DIR} ${knx-iot-stack_BINARY_DIR})
-      endif()
-    endif()
+    option(wxBUILD_SHARED "" OFF)
+    # compile in the knx iot Router code from the stack
+    set(OC_IOT_ROUTER_ENABLED ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(${KNX_REPO})
 
     add_executable(knx_iot_example
       ${PROJECT_SOURCE_DIR}/knx_iot_example.c )
@@ -114,6 +133,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
       endif()
       add_definitions(-DOC_SIMULATION)
     endif()
+
 
 else()
     set(CASCODA_CHILI2_CONFIG_STRING "DEV_BOARD" CACHE STRING "KNX only supported on Devboard" FORCE)
@@ -187,19 +207,26 @@ else()
     target_compile_definitions(knx_iot_example_reed PRIVATE NO_MAIN)
     
     target_compile_definitions(knx_iot_example_sleepy PRIVATE NO_MAIN SLEEPY)
+
+    if(NOT DEFINED STACK_SIZE_KB)
+      set(STACK_SIZE_KB "5" CACHE STRING "Number of KB to alloc stack")
+    endif()
+    if(NOT DEFINED HEAP_SIZE_BASE_KB)
+      set(HEAP_SIZE_BASE_KB "40" CACHE STRING "Number of KB to alloc heap")
+    endif()
+    math(EXPR STACK_SIZE "1024 * ${STACK_SIZE_KB}")
+    math(EXPR HEAP_SIZE_ED "1024 * (${HEAP_SIZE_BASE_KB})")
+    math(EXPR HEAP_SIZE_REED "1024 * (${HEAP_SIZE_BASE_KB}-4)")
+    math(EXPR HEAP_SIZE_SLEEPY "1024 * (${HEAP_SIZE_BASE_KB})")
     
     # Set the size of the stack and the heap, respectively
-    cascoda_configure_memory(knx_iot_example_ed 0x1500 0xc000)
-    cascoda_configure_memory(knx_iot_example_reed 0x1500 0xa700)
-    #cascoda_configure_memory(knx_iot_example 0x1500 0xc000)
-    # tries when we are running out of memory
-    # e.g reducing stack, reducing heap
-    #cascoda_configure_memory(knx_iot_example 0x1500 0xad00)
-    cascoda_configure_memory(knx_iot_example_sleepy 0x1500 0xc000)
-    #cascoda_configure_memory(knx_iot_example_sleepy 0x1500 0xc000)
-    # tries when we are running out of memory
-    # e.g reducing stack, reducing heap
-    #cascoda_configure_memory(knx_iot_example_sleepy 0x1500 0xad00)
+    message(STATUS "Stack Size: ${STACK_SIZE}")
+    message(STATUS "Heap Size ed: ${HEAP_SIZE_ED}")
+    message(STATUS "Heap Size reed: ${HEAP_SIZE_REED}")
+    message(STATUS "Heap Size sleepy: ${HEAP_SIZE_SLEEPY}")
+    cascoda_configure_memory(knx_iot_example_ed ${STACK_SIZE} ${HEAP_SIZE_ED})
+    cascoda_configure_memory(knx_iot_example_reed ${STACK_SIZE} ${HEAP_SIZE_REED})
+    cascoda_configure_memory(knx_iot_example_sleepy ${STACK_SIZE} ${HEAP_SIZE_SLEEPY})
 
     # Generate the .bin file to be flashed onto the Chili
     cascoda_make_binary(knx_iot_example_ed CASCODA_BUILD_KNX)
@@ -247,4 +274,5 @@ else()
           )
         endif()
     endif()
+
 endif()

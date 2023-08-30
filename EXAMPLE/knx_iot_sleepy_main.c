@@ -48,6 +48,7 @@
 #include "ca-ot-util/cascoda_dns.h"
 #include "cascoda-bm/cascoda_evbme.h"
 #include "cascoda-bm/cascoda_interface.h"
+#include "cascoda-bm/cascoda_ota_upgrade.h"
 #include "cascoda-bm/cascoda_serial.h"
 #include "cascoda-bm/cascoda_types.h"
 #include "cascoda-util/cascoda_time.h"
@@ -63,6 +64,7 @@
 #include "port/oc_clock.h"
 #include "port/oc_log.h"
 #include "port/dns-sd.h"
+#include "security/oc_spake2plus.h"
 #include "manufacturer_storage.h"
 #include "oc_api.h"
 #include "oc_buffer_settings.h"
@@ -100,8 +102,10 @@ void hostname_cb(size_t device_index, oc_string_t host_name, void *data);
 int app_set_serial_number(char *serial_number);
 int app_init(void);
 
-// // Implemented in the cascoda knx-iot port
-// void swu_cb(size_t device_index, oc_separate_response_t *response, size_t binary_size, size_t offset, uint8_t *payload, size_t len, void *data);
+#if CASCODA_OTA_UPGRADE_ENABLED
+// Implemented in the cascoda knx-iot port
+void swu_cb(size_t device_index, oc_separate_response_t *response, size_t binary_size, size_t offset, uint8_t *payload, size_t len, void *data);
+#endif
 
 /**
  * @file
@@ -259,6 +263,11 @@ int main(void)
 	// Hardware specific setup
 	hardware_init();
 
+#if CASCODA_OTA_UPGRADE_ENABLED
+	/* Initialises handling of OTA Firmware Upgrade */
+	ota_upgrade_init();
+#endif
+
 	// A backoff mechanism for joining the network
 	u32_t joinCooldownTimer = 0;
 
@@ -340,12 +349,49 @@ int main(void)
 				 sn[5]);
 		app_set_serial_number(serial_number_str);
 	}
+	
+#ifdef OC_SPAKE
+	char pwd[33];
+	error = knx_get_stored_password(pwd);
+	if (error)
+	{
+		PRINT_APP("Error: Stored password not found! Using default value...\n");
+		PRINT_APP(
+			"Please create the data file using knx-gen-data and flash it with chilictl in order to fix this issue.\n");
+	}
+	else
+	{
+		oc_spake_set_password(pwd);
+	}
+	
+	uint8_t salt[32], rand[32];
+	uint32_t it;
+	mbedtls_mpi w0;
+	mbedtls_ecp_point L;
+	mbedtls_mpi_init(&w0);
+	mbedtls_ecp_point_init(&L);
+	error = knx_get_stored_spake(salt, rand, &it, &w0, &L);
+	if (error)
+	{
+		PRINT_APP("Error: Stored spake record not found! Using runtime generated values\n");
+		PRINT_APP(
+			"Please create the data file using knx-gen-data and flash it with chilictl in order to fix this issue.\n");
+	}
+	else
+	{
+		oc_spake_set_parameters(rand, salt, it, w0, L);
+		mbedtls_mpi_free(&w0);
+		mbedtls_ecp_point_free(&L);
+	}
+#endif
 
 	/* set the application callbacks */
 	oc_set_hostname_cb(hostname_cb, NULL);
 	oc_set_reset_cb(reset_cb, NULL);
 	oc_set_factory_presets_cb(factory_presets_cb, NULL);
-	// oc_set_swu_cb(swu_cb, (void *)"image_name");
+#if CASCODA_OTA_UPGRADE_ENABLED
+	oc_set_swu_cb(swu_cb, (void *)"image_name");
+#endif
 	oc_set_programming_mode_cb(prog_mode_cb, NULL);
 
 	/* start the stack */

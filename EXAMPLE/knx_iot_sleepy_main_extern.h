@@ -39,6 +39,10 @@
 #include "cascoda-bm/cascoda_interface.h"
 #include "cascoda-bm/cascoda_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* for OpenThread: poll period for keep-alive */
 #define SED_POLL_PERIOD 5000
 /* devices will stay awake for at least this long before going back to sleep*/
@@ -108,3 +112,7 @@ bool hardware_can_sleep();
  *
  */
 ca_error sed_poll_handler(void *aContext);
+
+#ifdef __cplusplus
+}
+#endif

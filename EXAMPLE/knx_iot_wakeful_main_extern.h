@@ -39,6 +39,10 @@
 #include "cascoda-bm/cascoda_interface.h"
 #include "cascoda-bm/cascoda_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief define what happens when receiving a post mesage on a URL
  *
@@ -69,3 +73,7 @@ void programming_mode_embedded(size_t device_index, bool programming_mode);
  *
  */
 void reset_embedded(size_t device_index, int reset_value, void *data);
+
+#ifdef __cplusplus
+}
+#endif

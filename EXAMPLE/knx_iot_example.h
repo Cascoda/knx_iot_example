@@ -55,9 +55,19 @@
 extern "C" {
 #endif
 
+#if defined(__GNUC__) || defined(__clang__) || defined(__CC_ARM) || defined(__TI_ARM__)
+#define PACKED __attribute__((__packed__)) //!< Helper macro to create smaller packed structs
+#else
+#define PACKED //!< Helper macro to create smaller packed structs
+#endif
+
 // URL defines
-#define URL_LED_1 "/p/o_1_1" // define URL LED_1 for /p/o_1_1
-#define URL_PB_1 "/p/o_2_2" // define URL PB_1 for /p/o_2_2
+#define URL_LED_1 "/p/o_1_1" //!< URL define for LED_1
+#define URL_PB_1 "/p/o_2_2" //!< URL define for PB_1 
+
+///@defgroup DPT_Switch
+///@ingroup DPT_Switch
+typedef bool DPT_Switch;
 
 /**
  * Callback invoked by the stack when a successfull put is done
@@ -65,7 +75,7 @@ extern "C" {
  * @param[in] url the url of the put
  *
  */
-typedef void (*oc_put_cb_t)(char* url);
+typedef void (*oc_put_cb_t)(const char* url);
 
 /**
  * @brief The put callback
@@ -97,116 +107,349 @@ int app_initialize_stack();
  * @param serial_number the serial number as string
  * @return int 0 == success
  */
-int app_set_serial_number(char* serial_number);
+int app_set_serial_number(const char* serial_number);
 
 /**
- * @brief checks if the url depicts an boolean
+ * @brief Gets the number of elements in dp/param array
  * 
  * @param url the url to check
- * @return true: url conveys a boolean
+ * @return int 0 if not an array endpoint, else length of array
  */
-bool app_is_bool_url(char* url);
+int app_get_url_array_size(const char *url);
+/**
+ * @name DPT_Switch functions
+ * getters/setters and other functions for DPT_Switch
+ */
+/**@{*/
+/**
+ * @ingroup DPT_Switch
+ * @brief Checks if the url depicts a DPT_Switch
+ * 
+ * @param[in] url the url 
+ * @return true: url conveys a DPT_Switch
+ */
+bool app_is_DPT_Switch_url(const char* url);
 
 /**
- * @brief retrieve the boolean variable of the url/data point
- * the caller needs to know if the resource/data point is conveying a boolean
- * "/p/o_1_1" of LED_1 
- * "/p/o_2_2" of PB_1 
+ * @ingroup DPT_Switch
+ * @brief Set a DPT_Switch
  * 
- * @param url the url of the resource/data point
- * @return true value is true
- * @return false value is false or error.
+ * @param[in] url the url for the DPT_Switch to set
+ * @param[in] in a pointer to the DPT_Switch to copy
+ * Can be the global variable itself
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_var;
+ * // ...set my_var somehow
+ * app_set_DPT_Switch_variable("/some/url", &my_var);
+ * ~~~
  */
-bool app_retrieve_bool_variable(char* url);
+void app_set_DPT_Switch_variable(const char* url, const DPT_Switch* in);
 
 /**
- * @brief set the boolean variable that belongs to the url 
- * The caller needs to know if the resource/data point is conveying a boolean
- * "/p/o_1_1" of LED_1
+ * @ingroup DPT_Switch
+ * @brief Set a DPT_Switch array
+ * If n would overflow the array then it is limited to the size
+ * of the array variable
  * 
- * @param url the url of the resource/data point
- * @param value the boolean value to be set
+ * @param[in] url the url for the DPT_Switch to set
+ * @param[in] in a pointer to the DPT_Switch to copy
+ * Can be the global variable itself
+ * @param[in] n number of elements in the array
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_arr[5];
+ * // ...set my_arr somehow
+ * app_set_DPT_Switch_array("/some/url", my_arr, 5);
+ * ~~~
  */
-void app_set_bool_variable(char* url, bool value);
+void app_set_DPT_Switch_array(const char* url, const DPT_Switch* in, int n);
 
 /**
- * @brief checks if the url depicts an int
+ * @ingroup DPT_Switch
+ * @brief Set part of a DPT_Switch array
+ * If n would overflow the array then it is limited to the size
+ * of the array variable. If start > array size then nothing happens.
  * 
- * @param url the url to check
- * @return true: url conveys a int
+ * @param[in] url the url for the DPT_Switch to set
+ * @param[in] in a pointer to the DPT_Switch to copy
+ * Can be the global variable itself
+ * @param[in] start starting index to write to array
+ * @param[in] n number of elements to write to array
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_var;
+ * // ...set my_var somehow
+ * // sets 1 element at index 5 in the array for "/some/url"
+ * app_set_DPT_Switch_array("/some/url", &my_var, 5, 1);
+ * ~~~
  */
-bool app_is_int_url(char* url);
+void app_set_DPT_Switch_array_elems(const char* url, const DPT_Switch* in, int start, int n);
 
 /**
- * @brief retrieve the int variable of the url/data point
- * the caller needs to know if the resource/data point is conveying a integer
+ * @ingroup DPT_Switch
+ * @brief Get a DPT_Switch array
  * 
- * @param url the url of the resource/data point
- * @return the integer value of the global variable
+ * @param[in] url the url for the DPT_Switch to get
+ * @param[out] out a pointer to the DPT_Switch to copy out to
+ * If NULL, won't copy but return the global variable if available
+ * @return pointer to the (copied) DPT_Switch <br>
+ * If out is NULL then returns the global variable for url if not 
+ * flash only for this datapoint/param <br>
+ * If the variable is flash only then it will return out <br>
+ * If out is provided then it will return it UNLESS an error occurred while 
+ * retrieving the variable from flash, in which case it will return NULL. <br>
+ * If an error occurs while getting the variable, returns NULL
+ *
+ * Example of how to use:
+ * ~~~{.c}
+ * DPT_Switch my_var;
+ * if (app_get_DPT_Switch_variable("/some/url", &my_var) == NULL) {
+ *   //Something went wrong, maybe print an error message.
+ *   return; 
+ * }
+ * // do something with my_var
+ * ~~~
  */
-int app_retrieve_int_variable(char* url);
+const volatile DPT_Switch* app_get_DPT_Switch_variable(const char *url, DPT_Switch* out);
 
 /**
- * @brief set the integer variable that belongs to the url 
- * The caller needs to know if the resource/data point is conveying a integer
+ * @ingroup DPT_Switch
+ * @brief Get a DPT_Switch array
  * 
- * @param url the url of the resource/data point
- * @param value the integer value to be set
+ * @param[in] url the url for the DPT_Switch to get
+ * @param[out] out a pointer to the DPT_Switch to copy out to
+ * If NULL, won't copy but return the global variable
+ * @param[in] n number of DPT_Switch elements to copy
+ * @return pointer to the (copied) DPT_Switch <br>
+ * If out is NULL then the global variable for url if not 
+ * flash only for this datapoint/param <br>
+ * If n is larger than the number of elements in the datatype, returns NULL <br>
+ * If the variable is flash only then it will return out <br>
+ * If out is provided then it will return it UNLESS an error occurred while 
+ * retrieving the variable from flash, in which case it will return NULL. <br>
+ * If an error occurs while getting the variable, returns NULL
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_arr[5];
+ * if (app_get_DPT_Switch_variable("/some/url", my_arr, 5) == NULL) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_arr
+ * ~~~
  */
+const volatile DPT_Switch* app_get_DPT_Switch_array(const char *url, DPT_Switch* out, int n);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Get a DPT_Switch array
+ * 
+ * @param[in] url the url for the DPT_Switch to get
+ * @param[out] out a pointer to the DPT_Switch to copy out to
+ * If NULL, won't copy but return the global variable
+ * @param[in] start starting index in global array to copy
+ * @param[in] n number of DPT_Switch elements to copy
+ * @return pointer to the (copied) DPT_Switch <br>
+ * If out is NULL then the global variable for url if not 
+ * flash only for this datapoint/param <br>
+ * If n is larger than the number of elements in the datatype, returns NULL <br>
+ * If the variable is flash only then it will return out <br>
+ * If out is provided then it will return it UNLESS an error occurred while 
+ * retrieving the variable from flash, in which case it will return NULL. <br>
+ * If an error occurs while getting the variable, returns NULL
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_var;
+ * // Gets 1 element at index 5 in the array for "/some/url"
+ * if (app_get_DPT_Switch_variable("/some/url", &my_var, 5, 1) == NULL) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_var
+ * ~~~
+ */
+const volatile DPT_Switch* app_get_DPT_Switch_array_elems(const char *url, DPT_Switch* out, int start, int n);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Parse a DPT_Switch from oc_rep_t
+ * 
+ * @param[in] rep The oc_rep_t* from which to parse
+ * @param[out] out The DPT_Switch to store into
+ * @return true: successfully parsed DPT_Switch
+ *
+ * ~~~{.c}
+ * //get an oc_rep_t to parse
+ * //oc_rep_t *rep;
+ * DPT_Switch my_var;
+ * if (oc_parse_DPT_Switch(rep, &my_var) == false) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_var
+ * ~~~
+ */
+bool oc_parse_DPT_Switch(oc_rep_t *rep, DPT_Switch *out);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Parse a DPT_Switch[] from oc_rep_t
+ * 
+ * @param[in] rep The oc_rep_t* from which to parse
+ * @param[out] out The DPT_Switch[] to store into
+ * @param[in] n The number of elements
+ * @return true: successfully parsed DPT_Switch
+ *
+ * ~~~{.c}
+ * //get an oc_rep_t to parse
+ * //oc_rep_t *rep;
+ * DPT_Switch my_arr[5];
+ * if (oc_parse_DPT_Switch_array(rep, my_arr, 5) == false) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_arr
+ * ~~~
+ */
+bool oc_parse_DPT_Switch_array(oc_rep_t *rep, DPT_Switch *out, int n);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Encode a DPT_Switch using oc_rep
+ * 
+ * @param[in] in The DPT_Switch to encode
+ *
+ * ~~~{.c}
+ * DPT_Switch my_var;
+ * app_get_DPT_Switch_variable("/some/url", &my_var);
+ * if (oc_encode_DPT_Switch(rep, &my_var) == false) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * size_t size = oc_rep_get_encoded_payload_size();
+ * uint8_t buf = oc_rep_get_encoder_buf();
+ * ~~~
+ */
+void oc_encode_DPT_Switch(const DPT_Switch *in);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Encode a DPT_Switch[] using oc_rep
+ * 
+ * @param[in] in The DPT_Switch[] to encode
+ * @param[in] n The number of elements
+ *
+ * ~~~{.c}
+ * DPT_Switch my_arr[5];
+ * app_get_DPT_Switch_array("/some/url", my_arr, 5);
+ * if (oc_encode_DPT_Switch_array(rep, my_arr, 5) == false) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * size_t size = oc_rep_get_encoded_payload_size();
+ * uint8_t buf = oc_rep_get_encoder_buf();
+ * ~~~
+ */
+void oc_encode_DPT_Switch_array(const DPT_Switch *in, int n);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Store a DPT_Switch into persistent memory
+ * 
+ * @param[in] name name of entry to store
+ * @param[in] in DPT_Switch to store
+ *
+ * ~~~{.c}
+ * DPT_Switch my_var;
+ * app_get_DPT_Switch_variable("/some/url", &my_var);
+ * persistent_storeDPT_Switch("/some/other/url", &my_var);
+ * ~~~
+ */
+void persistent_store_DPT_Switch(const char *name, const DPT_Switch *in);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Store a DPT_Switch[] into persistent memory
+ * 
+ * @param[in] name name of entry to store
+ * @param[in] in DPT_Switch[] to store
+ * @param[in] n number of elements to store
+ *
+ * ~~~{.c}
+ * DPT_Switch my_arr[5];
+ * app_get_DPT_Switch_array("/some/url", my_var, 5);
+ * persistent_storeDPT_Switch_array("/some/other/url", my_arr, 5);
+ * ~~~
+ */
+void persistent_store_DPT_Switch_array(const char *name, const DPT_Switch *in, int n);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Load a DPT_Switch from persistent memory
+ * 
+ * @param[in] name name of entry to load
+ * @param[out] out DPT_Switch to load into
+ * @return true on success, false otherwise
+ *
+ * ~~~{.c}
+ * DPT_Switch my_var;
+ * app_get_DPT_Switch_variable("/some/url", &my_var);
+ * if (persistent_loadDPT_Switch("/some/other/url", &my_var) == false) {
+ *   //something went wrong
+ *   return;
+ * }
+ * ~~~
+ */
+bool persistent_load_DPT_Switch(const char *name, DPT_Switch *out);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Load a DPT_Switch[] from persistent memory
+ * 
+ * @param[in] name name of entry to load
+ * @param[out] out DPT_Switch[] to load into
+ * @param[in] n number of elements in array
+ * @return true on success, false otherwise
+ *
+ * ~~~{.c}
+ * DPT_Switch my_arr[5];
+ * app_get_DPT_Switch_array("/some/url", my_arr, 5);
+ * if (persistent_loadDPT_Switch("/some/other/url", my_arr, 5) == false) {
+ *   //something went wrong
+ *   return;
+ * }
+ * ~~~
+ */
+bool persistent_load_DPT_Switch_array(const char *name, DPT_Switch *out, int n);
+/**@}*/
+
+
+// Getters/Setters for bool
+/**
+ * @brief Checks if the url depicts a bool
+ * 
+ * @param url the url 
+ * @return true: url conveys a bool
+ */
+bool app_is_bool_url(const char* url);
+
+/**
+ * @brief Set a bool
+ * 
+ * @param url the url for the bool to set
+ * @param value value to set
+ */
+void app_set_bool_variable(const char* url, bool value);
+
+/**
+ * @brief Get a bool
+ * 
+ * @param url the url for the bool to get
+ * @return boolean variable
+ */
+bool app_retrieve_bool_variable(const char *url);
  
-void app_set_int_variable(char* url, int value);
-
-void app_set_integer_variable(char* url, int value);
-
-/**
- * @brief checks if the url depicts an double
- * 
- * @param url the url to check
- * @return true: url conveys a double
- */
-bool app_is_double_url(char* url);
-
-/**
- * @brief retrieve the double variable of the url/data point
- * the caller needs to know if the resource/data point is conveying a integer
- * 
- * @param url the url of the resource/data point
- * @return the double value of the global variable
- */
-double app_retrieve_double_variable(char* url);
-
-/**
- * @brief set the double variable that belongs to the url 
- * The caller needs to know if the resource/data point is conveying a double
- * 
- * @param url the url of the resource/data point
- * @param value the double value to be set
- */
-void app_set_double_variable(char* url, double value);
-
-/**
- * @brief function to check if the url is represented by a string
- *
- * @param url the url value is a string
- * @return true = url returns a string, false = url is not a string
- */
-bool app_is_string_url(char* url);
-
-/**
- * @brief sets the global string variable at the url
- *
- * @param url the url indicating the global variable
- * @param value the string value to be set
- */
-void app_set_string_variable(char* url, char* value);
-
-/**
- * @brief retrieve the global string variable at the url
- *
- * @param url the url indicating the global variable
- * @return the value of the variable
- */
-char* app_retrieve_string_variable(char* url);
 
 /**
  * @brief checks if the url represents a parameter
@@ -214,7 +457,7 @@ char* app_retrieve_string_variable(char* url);
  * @param url the url
  * @return true the url represents a parameter
  */
-bool app_is_url_parameter(char* url);
+bool app_is_url_parameter(const char* url);
 
 /**
  * @brief retrieves the url of a parameter
@@ -222,7 +465,7 @@ bool app_is_url_parameter(char* url);
  * @param index the index to retrieve the url from
  * @return the url or NULL
  */
-char* app_get_parameter_url(int index);
+const char* app_get_parameter_url(int index);
 
 /**
  * @brief retrieves the name of a parameter
@@ -230,7 +473,7 @@ char* app_get_parameter_url(int index);
  * @param index the index to retrieve the parameter name from
  * @return the name or NULL
  */
-char* app_get_parameter_name(int index);
+const char* app_get_parameter_name(int index);
 
 /**
  * @brief sets the fault state of the url/data point 
@@ -239,7 +482,7 @@ char* app_get_parameter_name(int index);
  * @param url the url of the resource/data point
  * @param value the boolean fault value to be set
  */
-void app_set_fault_variable(char* url, bool value);
+void app_set_fault_variable(const char* url, bool value);
 
 /**
  * @brief checks if the url is in use (e.g. used in the Group Object Table)
@@ -248,7 +491,7 @@ void app_set_fault_variable(char* url, bool value);
  * @return true: entry in Group Object Table has the URL
  * @return false: No entry in Group Object Table has the URL
  */
-bool app_is_url_in_use(char* url);
+bool app_is_url_in_use(const char* url);
 
 /**
  * @brief function to report if the (oscore) security is turn on for this instance
@@ -263,7 +506,7 @@ bool app_is_secure();
  * 
  * @return password (as string)
  */
-char* app_get_password();
+const char* app_get_password();
 
 /**
  * @brief function to set the input string to upper case
@@ -279,7 +522,7 @@ void app_str_to_upper(char *str);
  * 
  * @param url the url of the resource/data point
  */
-void dev_btn_toggle_cb(char *url);
+void dev_btn_toggle_cb(const char *url);
 
 #ifdef __cplusplus
 }

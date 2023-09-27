@@ -105,7 +105,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
 
     option(wxBUILD_SHARED "" OFF)
     # compile in the knx iot Router code from the stack
-    set(OC_IOT_ROUTER_ENABLED ON CACHE BOOL "" FORCE)
+    # set(OC_IOT_ROUTER_ENABLED ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(${KNX_REPO})
 
     add_executable(knx_iot_example

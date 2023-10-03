@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.18)
+project(knx_iot_demos)
+
+option(CASCODA_USE_PRIVATE_SDK "" OFF)
+
+if(CASCODA_USE_PRIVATE_SDK)
+  set(CASCODA_REPO cascoda-sdk-priv)
+else()
+  set(CASCODA_REPO cascoda-sdk)
+endif()
+
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
+  add_custom_target(copy-ldrom ALL DEPENDS ldrom_hid)
+  add_custom_command(TARGET copy-ldrom
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid ${PROJECT_BINARY_DIR}/bin/ldrom_hid
+      COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid.bin ${PROJECT_BINARY_DIR}/bin/ldrom_hid.bin
+  )
+
+  if (CASCODA_OTA_UPGRADE_ENABLED EQUAL 1)
+      add_custom_target(copy-ota-bootloader ALL DEPENDS ota-bootloader)
+      add_custom_command(TARGET copy-ota-bootloader
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ota-bootloader ${PROJECT_BINARY_DIR}/bin/ota-bootloader
+        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ota-bootloader.bin ${PROJECT_BINARY_DIR}/bin/ota-bootloader.bin
+      )
+  endif()
+endif()

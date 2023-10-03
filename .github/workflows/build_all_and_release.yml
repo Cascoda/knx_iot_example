@@ -167,6 +167,9 @@ jobs:
         cd EXAMPLE
         chmod +x ./build_win_bin_ninja.sh
         ./build_win_bin_ninja.sh
+        cd ../BATTLESHIP
+        chmod +x ./build_win_bin_ninja.sh
+        ./build_win_bin_ninja.sh
     - name: Upload
       uses: actions/upload-artifact@v3
       with:
@@ -178,35 +181,16 @@ jobs:
            ./EXAMPLE/*/*/*.jpg
            ./EXAMPLE/*/*/*.PNG
            ./EXAMPLE/*/MT/*.knxproj
-
-  build_embedded_unsecure:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: install ninja
-      run: |
-        sudo apt-get -y install ninja-build
-    - name: Build
-      run: |
-        curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
-        cd EXAMPLE
-        chmod +x ./build_win_bin_ninja_unsecured.sh
-        ./build_win_bin_ninja_unsecured.sh
-    - name: Upload unsecured binaries
-      uses: actions/upload-artifact@v3
-      with:
-        name: embedded_unsecured
-        path: |
-           ./EXAMPLE/build_w_b_u/*/*.bin
-           ./EXAMPLE/*.md
-           ./EXAMPLE/*/*.md
-           ./EXAMPLE/*/*/*.jpg
-           ./EXAMPLE/*/*/*.PNG
-           ./EXAMPLE/*/MT/*.knxproj
+           ./BATTLESHIP/build_win_bin/*/*.bin
+           ./BATTLESHIP/*.md
+           ./BATTLESHIP/*/*.md
+           ./BATTLESHIP/*/*/*.jpg
+           ./BATTLESHIP/*/*/*.PNG
+           ./BATTLESHIP/*/MT/*.knxproj
 
   # Makes a release with everything that was built above
   makerelease:
-    needs: [build_windows, build_embedded_secure, build_embedded_unsecure]
+    needs: [build_windows, build_embedded_secure]
     name: Release archives
     runs-on: ubuntu-latest
 
@@ -259,16 +243,11 @@ jobs:
       with:
         name: embedded_secured
 
-    - uses: actions/download-artifact@v1
-      with:
-        name: embedded_unsecured
-
     # Zip them
     - name: Zip the release assets
       run: |
         zip -r windows_EXAMPLE_secured.zip windows_EXAMPLE_secured
         zip -r embedded_secured.zip embedded_secured
-        zip -r embedded_unsecured.zip embedded_unsecured
 
     - name: Release windows_EXAMPLE_secured
       uses: actions/upload-release-asset@v1
@@ -288,13 +267,4 @@ jobs:
         upload_url: ${{steps.create_release.outputs.upload_url}}
         asset_path: ./embedded_secured.zip
         asset_name: embedded_secured.zip
-        asset_content_type: application/zip
-    - name: embedded_unsecured
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{steps.create_release.outputs.upload_url}}
-        asset_path: ./embedded_unsecured.zip
-        asset_name: embedded_unsecured.zip
         asset_content_type: application/zip

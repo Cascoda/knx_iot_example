@@ -20,6 +20,9 @@ jobs:
         cd EXAMPLE
         chmod +x ./build_win_bin_ninja.sh
         ./build_win_bin_ninja.sh
+        cd ../BATTLESHIP
+        chmod +x ./build_win_bin_ninja.sh
+        ./build_win_bin_ninja.sh
     - name: Upload
       uses: actions/upload-artifact@v3
       with:
@@ -31,6 +34,12 @@ jobs:
            ./EXAMPLE/*/*/*.jpg
            ./EXAMPLE/*/*/*.PNG
            ./EXAMPLE/*/MT/*.knxproj
+           ./BATTLESHIP/build_win_bin/*/*.bin
+           ./BATTLESHIP/*.md
+           ./BATTLESHIP/*/*.md
+           ./BATTLESHIP/*/*/*.jpg
+           ./BATTLESHIP/*/*/*.PNG
+           ./BATTLESHIP/*/MT/*.knxproj
 
   build_embedded_unsecure:
     runs-on: ubuntu-latest
@@ -45,6 +54,9 @@ jobs:
         cd EXAMPLE
         chmod +x ./build_win_bin_ninja_unsecured.sh
         ./build_win_bin_ninja_unsecured.sh
+        cd ../BATTLESHIP
+        chmod +x ./build_win_bin_ninja_unsecured.sh
+        ./build_win_bin_ninja.sh
     - name: Upload unsecured binaries
       uses: actions/upload-artifact@v3
       with:
@@ -56,5 +68,11 @@ jobs:
            ./EXAMPLE/*/*/*.jpg
            ./EXAMPLE/*/*/*.PNG
            ./EXAMPLE/*/MT/*.knxproj
+           ./BATTLESHIP/build_win_bin/*/*.bin
+           ./BATTLESHIP/*.md
+           ./BATTLESHIP/*/*.md
+           ./BATTLESHIP/*/*/*.jpg
+           ./BATTLESHIP/*/*/*.PNG
+           ./BATTLESHIP/*/MT/*.knxproj
 
         #retention-days: 5

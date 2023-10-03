@@ -40,39 +40,3 @@ jobs:
            ./BATTLESHIP/*/*/*.jpg
            ./BATTLESHIP/*/*/*.PNG
            ./BATTLESHIP/*/MT/*.knxproj
-
-  build_embedded_unsecure:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: install ninja
-      run: |
-        sudo apt-get -y install ninja-build
-    - name: Build
-      run: |
-        curl https://raw.githubusercontent.com/Cascoda/cascoda-sdk/master/etc/arm_gnu_toolchain_setup.sh | bash; source /etc/profile
-        cd EXAMPLE
-        chmod +x ./build_win_bin_ninja_unsecured.sh
-        ./build_win_bin_ninja_unsecured.sh
-        cd ../BATTLESHIP
-        chmod +x ./build_win_bin_ninja_unsecured.sh
-        ./build_win_bin_ninja.sh
-    - name: Upload unsecured binaries
-      uses: actions/upload-artifact@v3
-      with:
-        name: embedded_unsecured
-        path: |
-           ./EXAMPLE/build_w_b_u/*/*.bin
-           ./EXAMPLE/*.md
-           ./EXAMPLE/*/*.md
-           ./EXAMPLE/*/*/*.jpg
-           ./EXAMPLE/*/*/*.PNG
-           ./EXAMPLE/*/MT/*.knxproj
-           ./BATTLESHIP/build_win_bin/*/*.bin
-           ./BATTLESHIP/*.md
-           ./BATTLESHIP/*/*.md
-           ./BATTLESHIP/*/*/*.jpg
-           ./BATTLESHIP/*/*/*.PNG
-           ./BATTLESHIP/*/MT/*.knxproj
-
-        #retention-days: 5

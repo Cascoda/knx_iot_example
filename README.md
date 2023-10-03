@@ -21,3 +21,12 @@ See the [video](https://www.youtube.com/watch?v=66mzvUYrxmc) of battleship being
 ## ETS Test project
 
 ETS Test projects can be found in the folder input/[Application]/MT
+
+## EINK display info
+
+https://www.waveshare.com/1.54inch-e-paper-module.htm
+
+- Description: 200x200, 1.54inch E-Ink display module
+- SKU: 12955
+- Part Number: 1.54inch e-Paper Module
+- Brand: Waveshare

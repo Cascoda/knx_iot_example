@@ -164,7 +164,7 @@ void lssb_ShortPress_cb(void *context)
   sw = !sw; //invert
   app_set_DPT_Switch_variable(URL_PB_1, &sw);
   // send out the s-mode message
-  oc_do_s_mode_with_scope(5, URL_PB_1, "w");
+  oc_do_s_mode_with_scope(5, URL_PB_1, "w");
 }
 
 

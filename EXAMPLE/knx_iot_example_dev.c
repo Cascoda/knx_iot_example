@@ -68,6 +68,7 @@
 #include "cascoda-util/cascoda_tasklet.h"
 #include "cascoda-util/cascoda_time.h"
 #include "devboard_btn.h"
+#include "devboard_btn_ext.h"
 #include "ca821x_error.h"
 #include <openthread/thread.h> 
 #include <platform.h>
@@ -82,6 +83,9 @@
 // generic defines
 #define SCHEDULE_NOW 0
 #define S_MODE_INTERVAL 30
+#define BTN_LONGPRESS_TIME_DEFAULT 250
+#define BTN_HOLD_TIME_DEFAULT 600
+#define THIS_DEVICE 0
 
 #ifdef SLEEPY
 // tick timer upon last wake
@@ -120,8 +124,6 @@ bool app_retrieve_fault_variable(const char* url);
 // ================================
 enum ImplementationDefinedParameters
 {
-  LSSB_BUTTON = DEV_SWITCH_1,
-  LSAB_LED = DEV_SWITCH_2,
   PROGRAMMING_MODE_INDICATOR = DEV_SWITCH_3,
   TRIGGER_FOR_PROGRAMMING_MODE_AND_RESET = DEV_SWITCH_4,
   RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS = 3000,
@@ -147,13 +149,13 @@ enum reset_button_state
 // FORWARD DECLARATIONS
 // ===============================
 
-static void init_globals(void)
+void app_initialize()
 {
   // Not implemented for now
 }
 
 // short LSSB button callback
-static void lssb_button_pressed(void *context)
+void lssb_ShortPress_cb(void *context)
 {
   (void)context;
   PRINT_APP("LSSB button pressed\n");
@@ -161,8 +163,10 @@ static void lssb_button_pressed(void *context)
   app_get_DPT_Switch_variable(URL_PB_1, &sw);
   sw = !sw; //invert
   app_set_DPT_Switch_variable(URL_PB_1, &sw);
-  oc_do_s_mode_with_scope(5, URL_PB_1, "w");
+  // send out the s-mode message
+  oc_do_s_mode_with_scope(5, URL_PB_1, "w");
 }
+
 
 //
 // code for programming mode and reset
@@ -184,6 +188,12 @@ static ca_tasklet g_reset_done_indicator;
 // forward declaration
 void actuator_test_init();
 #endif
+
+///////////////////////////////////////////////////////////////////////////////
+//              App GET/PUT callbacks                                        //
+///////////////////////////////////////////////////////////////////////////////
+
+
 /**
  * @brief handle the callback on put for the url
  * the function should:
@@ -194,10 +204,27 @@ void actuator_test_init();
  *
  * @param url the url that received a PUT invocation.
  */
-void put_callback(const char* url){
+void dev_put_callback(const char* url){
   if (strcmp(url, URL_LED_1) == 0) {
-    /* update led */ 
-    DVBD_SetLED(LSAB_LED, !*app_get_DPT_Switch_variable(URL_LED_1, NULL));
+        /* update led */ 
+        setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_417INFOONOFFOUTPUT, NULL));
+  }
+}
+
+/**
+ * @brief handle the callback on get for the url
+ * the function should:
+ * - determine what type the url is using
+ * - read data from a sensor
+ * - set the data of the url
+ *   the value is read in the GET handler after this callback is called.
+ *
+ * @param url the url that received a GET invocation.
+ */
+void dev_get_callback(const char* url){
+  if (strcmp(url, URL_LED_1) == 0) {
+        /* update led */ 
+        setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_417INFOONOFFOUTPUT, NULL));
   }
 }
 
@@ -205,6 +232,7 @@ void put_callback(const char* url){
 // Development Board
 // Generic code for programming mode and reset
 //
+static enum reset_button_state state_snapshot;
 
 /**
  * @brief button callback for the reset procedure
@@ -214,7 +242,6 @@ void put_callback(const char* url){
 static void reset_hold_cb(void *context)
 {
   (void)context;
-  static enum reset_button_state state_snapshot;
   PRINT_APP("=== reset_hold_cb()\n");
 
 #ifdef DEMO_MODE
@@ -238,7 +265,6 @@ static void reset_hold_cb(void *context)
 
       // Give feedback to the user that reset is done (so they know when to release the button)
       state_snapshot = KNX_RESET;
-      TASKLET_ScheduleDelta(&g_reset_done_indicator, SCHEDULE_NOW, &state_snapshot);
       oc_device_info_t* device = oc_core_get_device_info(0);
       knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
 
@@ -250,7 +276,6 @@ static void reset_hold_cb(void *context)
 
       // Give feedback to the user that reset is done (so they know when to release the button)
       state_snapshot = THREAD_RESET;
-      TASKLET_ScheduleDelta(&g_reset_done_indicator, SCHEDULE_NOW, &state_snapshot);
 
       break;
 
@@ -270,6 +295,7 @@ static void reset_long_press_cb(void *context)
 {
   (void)context;
   PRINT_APP("=== reset_long_press_cb\n");
+  TASKLET_ScheduleDelta(&g_reset_done_indicator, SCHEDULE_NOW, &state_snapshot);
   g_reset_state = KNX_RESET;
 }
 
@@ -302,7 +328,7 @@ static ca_error reset_done_feedback(void *context)
   if (count++ < RESET_INDICATOR_FLICKER_COUNT)
   {
     uint8_t led_state = 0;
-    DVBD_Sense(PROGRAMMING_MODE_INDICATOR, &led_state);
+    DVBD_SenseOutput(PROGRAMMING_MODE_INDICATOR, &led_state);
     DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, !(led_state));
 
     if (reset_type == KNX_RESET)
@@ -338,7 +364,7 @@ static ca_error programming_mode_handler(void *context)
   (void)context;
   uint8_t led_state = 0;
 
-  DVBD_Sense(PROGRAMMING_MODE_INDICATOR, &led_state);
+  DVBD_SenseOutput(PROGRAMMING_MODE_INDICATOR, &led_state);
   DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, !(led_state));
 
   TASKLET_ScheduleDelta(&g_programming_mode_handler, PROGRAMMING_MODE_INDICATOR_FLASHING_PERIOD_MS / 2, NULL);
@@ -453,21 +479,25 @@ void reset_embedded(size_t device_index, int reset_value, void *data)
 static void programming_mode_init(dvbd_led_btn flashing_led, dvbd_led_btn program_mode_button)
 {
 #if !FAKE_SENSOR_DATA
-  // The flashing LED and the button used to put the device in programming mode must be different
-  if (flashing_led == program_mode_button)
-    return;
 
   // Initializes the tasklet for programming mode
   TASKLET_Init(&g_programming_mode_handler, &programming_mode_handler);
 
   // Registers the button and LED
+  if (flashing_led != program_mode_button){
 #ifdef SLEEPY
-  DVBD_RegisterButtonIRQInput(program_mode_button, JUMPER_POS_1);
+    DVBD_RegisterButtonIRQInput(program_mode_button, JUMPER_POS_1);
 #else
-  DVBD_RegisterButtonInput(program_mode_button, JUMPER_POS_1);
+    DVBD_RegisterButtonInput(program_mode_button, JUMPER_POS_1);
 #endif // SLEEPY
-
-  DVBD_RegisterLEDOutput(flashing_led, JUMPER_POS_1);
+    DVBD_RegisterLEDOutput(flashing_led, JUMPER_POS_1);
+  } else {
+#ifdef SLEEPY
+    DVBD_RegisterSharedIRQButtonLED(program_mode_button, JUMPER_POS_1);
+#else
+    DVBD_RegisterSharedButtonLED(program_mode_button, JUMPER_POS_1);
+#endif // SLEEPY
+  }
 
   // Set the device in programming mode when the program_mode_button is short-pressed
   DVBD_SetButtonShortPressCallback(program_mode_button, &prog_mode_short_press_cb, NULL, BTN_SHORTPRESS_RELEASED);
@@ -490,8 +520,8 @@ restart_cb(size_t device_index, void *data)
   // turn off the programming mode light
   exit_programming_mode(device_index);
   
-  // do we actually want to do a restart here?
-  //BSP_SystemReset(SYSRESET_APROM);
+  // NOTE: We do not want to do a device reset here (i.e. System reboot),
+  // despite the suggestion to do so by the spec.
 }
 
 
@@ -559,7 +589,6 @@ void hardware_reinitialise(void)
 } 
 #endif // SLEEPY
 
-
 /**
  * @brief do the hardware installation
  *
@@ -568,8 +597,8 @@ void hardware_reinitialise(void)
 void hardware_init()
 {
   /* set the put callback on the underlaying code */
-  app_set_put_cb(put_callback);
-  
+  app_set_put_cb(dev_put_callback);
+  //app_set_get_cb(dev_get_callback);
 #ifdef SLEEPY
   // Initialize sleepy timeout handler
   TASKLET_Init(&g_sed_poll_tasklet, &sed_poll_handler);
@@ -583,22 +612,37 @@ void hardware_init()
 #endif
   /* Initialize knx-specific development board functionality */
   knx_specific_init();
+  DVBD_RegisterButtonInput(DEV_SWITCH_1, JUMPER_POS_1); 
+  DVBD_SetButtonShortPressCallback(DEV_SWITCH_1, &lssb_ShortPress_cb, NULL, BTN_SHORTPRESS_RELEASED);    
 
-  /* Initialize globals */
-  init_globals();
+
+DVBD_RegisterLEDOutput(DEV_SWITCH_2, JUMPER_POS_1);   
+
+ 
 
   
-  /* 2nd LED (1) */
-  DVBD_RegisterLEDOutput(LSAB_LED, JUMPER_POS_1);
-  /* 1st BTN (0)  */
-  DVBD_RegisterButtonInput(LSSB_BUTTON, JUMPER_POS_1);
-  DVBD_SetButtonShortPressCallback(LSSB_BUTTON, &lssb_button_pressed, NULL, BTN_SHORTPRESS_PRESSED);
+
+
 
 #ifdef ACTUATOR_TEST_MODE
   /* run the tests after hardware initialiation */
   actuator_test_init();
 #endif
+
+ 
+
+
+
 }
+
+
+void setLED(led_t led, bool value)
+{
+  switch(led){
+    case LED_lsab: DVBD_SetLED(DEV_SWITCH_2, value?LED_ON:LED_OFF); break; 
+    default: break;
+  }
+} 
 
 /**
  * @brief do polling of the hardware
@@ -608,6 +652,10 @@ void hardware_init()
 void hardware_poll()
 {
   DVBD_PollButtons();
+  // Add a delay so we don't poll too fast
+  // as this affects the brightness of the 
+  // shared LEDs
+  WAIT_ms(3);
 }
 
 bool app_is_url_in_use(const char* url)
@@ -627,6 +675,8 @@ bool app_is_url_in_use(const char* url)
   }
   return false;
 }
+
+ 
 
 #ifdef ACTUATOR_TEST_MODE
 /* code for actuator testing */
@@ -660,4 +710,6 @@ void actuator_test_init()
 }
 
 #endif // ACTUATOR_TEST_MODE
-
+//embedded is always built with 
+__attribute__((__weak__)) 
+extern void app_initialize(){}

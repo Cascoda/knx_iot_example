@@ -61,6 +61,8 @@ extern "C" {
 #define PACKED //!< Helper macro to create smaller packed structs
 #endif
 
+#define THIS_DEVICE 0
+
 // URL defines
 #define URL_LED_1 "/p/o_1_1" //!< URL define for LED_1
 #define URL_PB_1 "/p/o_2_2" //!< URL define for PB_1 
@@ -68,6 +70,40 @@ extern "C" {
 ///@defgroup DPT_Switch
 ///@ingroup DPT_Switch
 typedef bool DPT_Switch;
+
+ 
+
+///////////////////////////////////////////////////////////////////////////////
+//               Functions to be implemented by the user!                    //
+//               NOTE: Some of these may get implemented by other            //
+//               modules depending on the input file!                        //
+///////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////
+//               Buttons                                                     //
+///////////////////////////////////////////////////////////////////////////////
+// Devboard  callbacks
+/**
+ * 
+ */
+void lssb_ShortPress_cb(void *ctx);    
+ 
+
+///////////////////////////////////////////////////////////////////////////////
+//               LEDs                                                        //
+///////////////////////////////////////////////////////////////////////////////
+
+typedef enum {
+  LED_lsab, 
+} led_t;
+void setLED(led_t led, bool value);
+inline static void setLED_lsab(bool value) { setLED(LED_lsab, value); }
+inline static void setLED_lsab_ON()  { setLED(LED_lsab, true); }
+inline static void setLED_lsab_OFF()  { setLED(LED_lsab, false); }   
+
+///////////////////////////////////////////////////////////////////////////////
+//           END Functions to be implemented by the user!                    //
+///////////////////////////////////////////////////////////////////////////////
 
 /**
  * Callback invoked by the stack when a successfull put is done
@@ -91,7 +127,31 @@ typedef struct oc_put_struct_t
  * 
  * @param cb the callback
  */
+
 void app_set_put_cb(oc_put_cb_t cb);
+/**
+ * Callback invoked by the stack when a successfull put is done
+ *
+ * @param[in] url the url of the put
+ *
+ */
+typedef void (*oc_get_cb_t)(const char* url);
+
+/**
+ * @brief The get callback
+ *
+ */
+typedef struct oc_get_struct_t
+{
+  oc_get_cb_t cb; /**< the get callback, e.g. when something has changed */
+} oc_get_struct_t;
+
+/**
+ * @brief set the get callback (on application level)
+ * 
+ * @param cb the callback
+ */
+void app_set_get_cb(oc_get_cb_t cb);
 
 /**
  * @brief initialize the stack
@@ -522,8 +582,9 @@ void app_str_to_upper(char *str);
  * 
  * @param url the url of the resource/data point
  */
-void dev_btn_toggle_cb(const char *url);
+void dev_btn_toggle_cb(const char *url); 
 
 #ifdef __cplusplus
 }
 #endif
+

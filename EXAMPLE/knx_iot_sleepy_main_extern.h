@@ -62,6 +62,12 @@ void post_callback(char *url);
 void hardware_init();
 
 /**
+ * @brief any hardware independent setup e.g. setting up graphics
+ *
+ */
+void logic_initialize();
+
+/**
  * @brief any hardware specific actions to be continually run e.g. checking buttons for input
  *
  */

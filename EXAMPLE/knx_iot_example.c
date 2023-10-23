@@ -200,7 +200,7 @@ const datapoint_t g_datapoints[2] = {
       /*device*/ 0,
       /*name*/ oc_string_create_const("LED_1"),
       /*uri*/ oc_string_create_const("/p/o_1_1"),
-      /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.52" ),
+      /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.61" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.switch"),
       /*interfaces*/ OC_IF_A,
       /*content_type*/ APPLICATION_CBOR,
@@ -932,7 +932,7 @@ void app_str_to_upper(char *str){
  * - knx spec version
  * - hardware version : [0, 4, 0]
  * - firmware version : [0, 4, 0]
- * - hardware type    : devbrd
+ * - hardware type    : 000001
  * - device model     : dev board example
  *
  */
@@ -957,7 +957,7 @@ app_init(void)
   
 
   /* set the hardware type*/
-  oc_core_set_device_hwt(0, "006576627264");
+  oc_core_set_device_hwt(0, "003030303031");
 
   /* set the model */
   oc_core_set_device_model(0, "dev board example");

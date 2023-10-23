@@ -112,6 +112,7 @@ bool app_retrieve_fault_variable(const char* url);
 #include "devboard_btn.h"
 #include "cascoda-util/cascoda_tasklet.h"
 #include "ca821x_error.h"
+#include "cascoda-bm/cascoda_wait.h"
 
 // ================================
 // DEFINES
@@ -149,10 +150,6 @@ enum reset_button_state
 // FORWARD DECLARATIONS
 // ===============================
 
-void app_initialize()
-{
-  // Not implemented for now
-}
 
 // short LSSB button callback
 void lssb_ShortPress_cb(void *context)
@@ -207,7 +204,7 @@ void actuator_test_init();
 void dev_put_callback(const char* url){
   if (strcmp(url, URL_LED_1) == 0) {
         /* update led */ 
-        setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_417INFOONOFFOUTPUT, NULL));
+        setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_LED_1, NULL));
   }
 }
 
@@ -224,7 +221,7 @@ void dev_put_callback(const char* url){
 void dev_get_callback(const char* url){
   if (strcmp(url, URL_LED_1) == 0) {
         /* update led */ 
-        setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_417INFOONOFFOUTPUT, NULL));
+        setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_LED_1, NULL));
   }
 }
 

@@ -1964,8 +1964,8 @@ void app_str_to_upper(char *str){
  * - serial number    : 00fa10010713
  * - base path
  * - knx spec version
- * - hardware version : [0, 1, 3]
- * - firmware version : [0, 1, 1]
+ * - hardware version : [0, 4, 0]
+ * - firmware version : [0, 4, 0]
  * - hardware type    : Windows
  * - device model     : KNX Battleships Demo eink
  *
@@ -1982,12 +1982,12 @@ app_init(void)
   oc_device_info_t *device = oc_core_get_device_info(0);
 
   
-  /* set the hardware version 0.1.3 */
-  oc_core_set_device_hwv(0, 0, 1, 3);
+  /* set the hardware version 0.4.0 */
+  oc_core_set_device_hwv(0, 0, 4, 0);
   
   
-  /* set the firmware version 0.1.1 */
-  oc_core_set_device_fwv(0, 0, 1, 1);
+  /* set the firmware version 0.4.0 */
+  oc_core_set_device_fwv(0, 0, 4, 0);
   
 
   /* set the hardware type*/

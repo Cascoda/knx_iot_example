@@ -200,7 +200,7 @@ const datapoint_t g_datapoints[2] = {
       /*device*/ 0,
       /*name*/ oc_string_create_const("LED_1"),
       /*uri*/ oc_string_create_const("/p/o_1_1"),
-      /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.52" ),
+      /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.61" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.switch"),
       /*interfaces*/ OC_IF_A,
       /*content_type*/ APPLICATION_CBOR,
@@ -422,25 +422,33 @@ int app_get_url_array_size(const char *url)
 bool app_is_DPT_Switch_url(const char* url)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
+  if (dp == NULL) {
     return false;
-  if (dp->type == DatapointType_DPT_Switch)
+  }
+  
+  
+  if (dp->type == DatapointType_DPT_Switch) {
     return true;
+  }
   return false;
 }
 
 void app_set_DPT_Switch_array_elems(const char* url, const DPT_Switch* in, int start, int n)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
-    return;    
-  int max_elem = dp->num_elements;
-  if(max_elem == 0)
-    max_elem = 1;
-  if (start >= max_elem)
+  if (dp == NULL) {
     return;
-  if (start+n > max_elem)
+  }
+  int max_elem = dp->num_elements;
+  if(max_elem == 0) {
+    max_elem = 1;
+  }
+  if (start >= max_elem) {
+    return;
+  }
+  if (start+n > max_elem) {
     n = max_elem-start;
+  }
   if (dp->g_var) {
     memcpy(&((DPT_Switch*)dp->g_var)[start], in, sizeof(DPT_Switch)*n);
     if (dp->persistent) {
@@ -470,19 +478,23 @@ void app_set_DPT_Switch_variable(const char* url, const DPT_Switch* in)
 const volatile DPT_Switch* app_get_DPT_Switch_array_elems(const char *url, DPT_Switch* out, int start, int n)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
-    return NULL;    
-  int max_elem = dp->num_elements;
-  if(max_elem == 0)
-    max_elem = 1;
-  if (start >= max_elem)
+  if (dp == NULL) {
     return NULL;
+  }
+  int max_elem = dp->num_elements;
+  if(max_elem == 0) {
+    max_elem = 1;
+  }
+  if (start >= max_elem) {
+    return NULL;
+  }
   if (start+n > max_elem){
     n = max_elem - start;
   }
   if (dp->g_var) {
-    if (out == NULL)
+    if (out == NULL) {
       return dp->g_var;
+    }
     memcpy(out, &((DPT_Switch*)dp->g_var)[start], sizeof(DPT_Switch)*n);
     return out;
   }else if (dp->persistent && out) {
@@ -490,8 +502,9 @@ const volatile DPT_Switch* app_get_DPT_Switch_array_elems(const char *url, DPT_S
     count = count?count:1;
     DPT_Switch *data = calloc(sizeof(DPT_Switch), count);
     memset(out, 0, n*sizeof(DPT_Switch));
-    if (persistent_load_DPT_Switch_array(get_datapoint_url(dp), data, count))
+    if (persistent_load_DPT_Switch_array(get_datapoint_url(dp), data, count)) {
       memcpy(out, &data[start], n*sizeof(DPT_Switch));
+    }
     free(data);
     return out;
   }
@@ -519,24 +532,29 @@ bool oc_parse_DPT_Switch_single(oc_rep_t *rep, DPT_Switch *out)
 
 bool oc_parse_DPT_Switch(oc_rep_t *rep, DPT_Switch *out)
 {
-  if (rep == NULL || out == NULL)
+  if (rep == NULL || out == NULL) {
     return false;
-  while (rep != NULL && rep->iname != 1)
+  }
+  while (rep != NULL && rep->iname != 1) {
     rep = rep->next;
-  if (rep == NULL)
+  }
+  if (rep == NULL) {
     return false;
-  oc_parse_DPT_Switch_single(rep, out);
+  }
+  return oc_parse_DPT_Switch_single(rep, out);
 }
 
 bool oc_parse_DPT_Switch_array(oc_rep_t *rep, DPT_Switch *out, int n)
 {
   oc_rep_t *rep_arr;
   int i = 0;
-  if (rep == NULL || out == NULL)
+  if (rep == NULL || out == NULL) {
     return false;
+  }
   while (rep != NULL && i < n){
-    if (rep->type != OC_REP_OBJECT)
+    if (rep->type != OC_REP_OBJECT) {
       return false;
+    }
     oc_parse_DPT_Switch(rep->value.object, &out[i]);
     rep = rep->next;
     i++;
@@ -546,16 +564,18 @@ bool oc_parse_DPT_Switch_array(oc_rep_t *rep, DPT_Switch *out, int n)
 
 void oc_encode_DPT_Switch_single(CborEncoder *parent, const DPT_Switch *in)
 {
-  if (in == NULL)
+  if (in == NULL) {
     return;
+  }
   oc_rep_i_set_key(parent, 1);
   cbor_encode_boolean(parent, *in);
 }
 
 void oc_encode_DPT_Switch(const DPT_Switch *in)
 {
-  if (in == NULL)
+  if (in == NULL) {
     return;
+  }
   oc_rep_begin_root_object();
   oc_encode_DPT_Switch_single(oc_rep_object(root), in);
   oc_rep_end_root_object();
@@ -563,8 +583,9 @@ void oc_encode_DPT_Switch(const DPT_Switch *in)
 
 void oc_encode_DPT_Switch_array(const DPT_Switch *in, int n)
 {
-  if (in == NULL)
+  if (in == NULL) {
     return;
+  }
   oc_rep_begin_links_array();
   for (int i = 0; i < n; i++) {
     oc_rep_begin_object(oc_rep_array(links), obj);
@@ -597,8 +618,9 @@ void persistent_store_DPT_Switch_array(const char *name, const DPT_Switch *in, i
   int size = oc_rep_get_encoded_payload_size();
   if (size > 0) {
     PRINT_APP("storing '%s', size: %d\n", name, size);
-    for(int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++) {
       PRINT_APP("%02X ", rep_buf[i]);
+    }
     PRINT_APP("\n");
     oc_storage_write(store_name, rep_buf, size);
   }else{
@@ -626,38 +648,32 @@ bool persistent_load_DPT_Switch_array(const char *name, DPT_Switch *out, int n)
   }
   long ret;
   bool error = true;
-#ifndef OC_DYNAMIC_ALLOCATION
-  char rep_objects_alloc[32];
-  oc_rep_t rep_objects_pool[32];
-  memset(rep_objects_alloc, 0, 32 * sizeof(char));
-  memset(rep_objects_pool, 0, 32 * sizeof(oc_rep_t));
-  struct oc_memb rep_objects = { sizeof(oc_rep_t), 32,
-                                 rep_objects_alloc, (void *)rep_objects_pool,
-                                 0 };
-  //oc_storage_buf = alloca(max_size);
-#else  /* !OC_DYNAMIC_ALLOCATION */
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
-#endif /* OC_DYNAMIC_ALLOCATION */
   oc_storage_buf = malloc(max_size);
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
   PRINT_APP("oc_storage_read() returned %d\n", ret);
-  for(int i = 0; i < ret; i++)
+  for(int i = 0; i < ret; i++) {
     PRINT_APP("%02X ", oc_storage_buf[i]);
+  }
   PRINT_APP("\n");
-  if (ret <= 0)
+  if (ret <= 0) {
     goto err;
-  if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError)
+  }
+  if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
     goto err;
-  if (oc_parse_DPT_Switch_array(rep, out, n) != true)
+  }
+  if (oc_parse_DPT_Switch_array(rep, out, n) != true) {
     goto err;
+  }
   error = false;
 err:
   free(oc_storage_buf);
   oc_free_rep(rep);
-  if(error)
+  if(error) {
     oc_storage_erase(name);
+  }
   return !error;
 }
 // BOOLEAN code
@@ -671,13 +687,16 @@ err:
 bool app_is_bool_url(const char* url)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
+  if (dp == NULL) {
     return false;
+  }
   return dp->type == DatapointType_bool;
 }
 
 /**
  * @brief sets the global boolean variable at the url
+ *
+ * Note: if the url is ot found then the value is not changed
  *
  * @param url the url indicating the global variable
  * @param value the value to be set
@@ -685,12 +704,15 @@ bool app_is_bool_url(const char* url)
 void app_set_bool_variable(const char* url, bool value)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
+  if (dp == NULL) {
     return;
-  if (dp->type != DatapointType_bool)
+  }
+  if (dp->type != DatapointType_bool) {
     return;
-  if (dp->g_var)
+  }
+  if (dp->g_var) {
     *((bool*)dp->g_var) = value;
+  }
 }
 
 /**
@@ -702,12 +724,15 @@ void app_set_bool_variable(const char* url, bool value)
 bool app_retrieve_bool_variable(const char* url)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
+  if (dp == NULL) {
     return false;
-  if (dp->type != DatapointType_bool)
+  }
+  if (dp->type != DatapointType_bool) {
     return false;
-  if (dp->g_var)
+  }
+  if (dp->g_var) {
     return *((bool*)dp->g_var);
+  }
   return false;
 }
 
@@ -722,13 +747,16 @@ bool app_retrieve_bool_variable(const char* url)
 void app_set_fault_variable(const char* url, bool value)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
+  if (dp == NULL) {
     return;
-  if (dp->resource.interfaces & OC_IF_A == 0)
+  }
+  if (dp->resource.interfaces & OC_IF_A == 0) {
     return;
-  if (dp->g_fault)
+  }
+  if (dp->g_fault) {
     *((bool*)dp->g_fault) = value;
-//TODO: Add back support for changing the feedback variable
+  }
+  //TODO: Add back support for changing the feedback variable
 }
 
 /**
@@ -740,12 +768,15 @@ void app_set_fault_variable(const char* url, bool value)
 bool app_retrieve_fault_variable(const char* url)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
-  if (dp == NULL)
+  if (dp == NULL) {
     return false;
-  if (dp->resource.interfaces & OC_IF_A == 0)
+  }
+  if (dp->resource.interfaces & OC_IF_A == 0) {
     return false;
-  if (dp->g_fault)
+  }
+  if (dp->g_fault) {
     return *((bool*)dp->g_fault);
+  }
   return false;
 }
 
@@ -800,6 +831,28 @@ void do_put_cb(const char* url)
   }
 }
 
+static oc_get_struct_t app_get = { NULL };
+
+void
+app_set_get_cb(oc_get_cb_t cb)
+{
+  app_get.cb = cb;
+}
+
+oc_get_struct_t *
+oc_get_get_cb(void)
+{
+  return &app_get;
+}
+
+void do_get_cb(const char* url)
+{
+  oc_get_struct_t *my_cb = oc_get_get_cb();
+  if (my_cb && my_cb->cb) {
+    my_cb->cb(url);
+  }
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -807,6 +860,7 @@ int app_initialize_stack();
 void signal_event_loop(void);
 void register_resources(void);
 void initialize_variables();
+void logic_initialize();
 int app_init(void);
 #ifdef __cplusplus
 }
@@ -876,8 +930,8 @@ void app_str_to_upper(char *str){
  * - serial number    : 00FA10010710
  * - base path
  * - knx spec version
- * - hardware version : [0, 1, 3]
- * - firmware version : [0, 1, 3]
+ * - hardware version : [0, 4, 0]
+ * - firmware version : [0, 4, 0]
  * - hardware type    : 000001
  * - device model     : dev board example
  *
@@ -894,16 +948,16 @@ app_init(void)
   oc_device_info_t *device = oc_core_get_device_info(0);
 
   
-  /* set the hardware version 0.1.3 */
-  oc_core_set_device_hwv(0, 0, 1, 3);
+  /* set the hardware version 0.4.0 */
+  oc_core_set_device_hwv(0, 0, 4, 0);
   
   
-  /* set the firmware version 0.1.3 */
-  oc_core_set_device_fwv(0, 0, 1, 3);
+  /* set the firmware version 0.4.0 */
+  oc_core_set_device_fwv(0, 0, 4, 0);
   
 
   /* set the hardware type*/
-  oc_core_set_device_hwt(0, "Windows");
+  oc_core_set_device_hwt(0, "003030303031");
 
   /* set the model */
   oc_core_set_device_model(0, "dev board example");
@@ -920,7 +974,7 @@ app_init(void)
   printf("\n === QR Code: KNX:S:%s;P:%s ===\n", serial_number_uppercase, oc_spake_get_password());
 #endif
 
-  initialize_variables();
+  initialize_variables();  
 
   return ret;
 }
@@ -1200,6 +1254,7 @@ static oc_event_callback_retval_t send_delayed_response(void *context)
   return OC_EVENT_DONE;
 }
 
+#if defined WIN32 || defined __linux__
 /**
  * @brief software update callback
  *
@@ -1212,7 +1267,7 @@ static oc_event_callback_retval_t send_delayed_response(void *context)
  * @param len the length of the image data
  * @param data the user data
  */
-/*void swu_cb(size_t device,
+void swu_cb(size_t device,
             oc_separate_response_t *response,
             size_t binary_size,
             size_t offset,
@@ -1230,7 +1285,8 @@ static oc_event_callback_retval_t send_delayed_response(void *context)
   fclose(write_ptr);
 
   oc_set_delayed_callback(response, &send_delayed_response, 0);
-}*/
+}
+#endif
 
 /**
  * @brief initializes the global variables
@@ -1252,10 +1308,19 @@ for(int i = 0; i < num_datapoints; i++) {
     const datapoint_t *it = &g_datapoints[i];
     if (!it->persistent) continue;
     if (it->g_var == NULL) continue;
-    if (it->num_elements)
-      g_datapoint_types[it->type].persistent_load_array(get_datapoint_url(it), (void*)it->g_var, it->num_elements);
-    else
-      g_datapoint_types[it->type].persistent_load(get_datapoint_url(it), (void*)it->g_var);
+    if (it->num_elements){
+      if (g_datapoint_types[it->type].persistent_load_array == NULL){
+        PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
+      } else {
+        g_datapoint_types[it->type].persistent_load_array(get_datapoint_url(it), (void*)it->g_var, it->num_elements);
+      }
+    } else {
+      if (g_datapoint_types[it->type].persistent_load == NULL){
+        PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
+      } else {
+        g_datapoint_types[it->type].persistent_load(get_datapoint_url(it), (void*)it->g_var);
+      }
+    }
   } 
  
 }
@@ -1306,7 +1371,10 @@ int app_initialize_stack()
   /* set the application callbacks */
   oc_set_hostname_cb(hostname_cb, NULL);
   oc_set_factory_presets_cb(factory_presets_cb, NULL);
-  // oc_set_swu_cb(swu_cb, (void *)fname);
+
+#if defined WIN32 || defined __linux__
+  oc_set_swu_cb(swu_cb, (void *)fname);
+#endif
 
   /* start the stack */
   init = oc_main_init(&handler);

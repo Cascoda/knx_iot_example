@@ -36,48 +36,25 @@ project(knx_iot_example  C CXX ASM)
 
 include(FetchContent)
 
-option(CASCODA_USE_PRIVATE_SDK "" OFF)
+option(CASCODA_USE_PRIVATE_SDK "Whether to use proprietary Cascoda code. Necessary for certain functionality." OFF)
+set(CASCODA_SDK_REF master CACHE STRING "The branch of the Cascoda SDK to use in this build")
+set(KNX_IOT_STACK_REF master CACHE STRING "The branch of the KNX IoT Stack to use in this build")
+set(USE_GITLAB OFF CACHE BOOL "use gitlab as source for KNX IoT Stack")
 
 if(CASCODA_USE_PRIVATE_SDK)
   set(CASCODA_REPO cascoda-sdk-priv)
 else()
   set(CASCODA_REPO cascoda-sdk)
 endif()
-
-if(DEFINED ENV{CASCODA_SDK_REF})
-  set(CASCODA_SDK_REF $ENV{CASCODA_SDK_REF} CACHE STRING "")
-else()
-  set(CASCODA_SDK_REF master CACHE STRING "")
-endif()
-
-if(DEFINED ENV{CASCODA_SDK_REPO})
-  set(CASCODA_SDK_REPO $ENV{CASCODA_SDK_REPO} CACHE STRING "")
-else()
-  set(CASCODA_SDK_REPO https://github.com/Cascoda/${CASCODA_REPO}.git CACHE STRING "")
-endif()
-
+set(CASCODA_SDK_REPO https://github.com/Cascoda/${CASCODA_REPO}.git)
 
 if(USE_GITLAB)
   set(KNX_REPO knx-iot-stack-gitlab)
-  set(KNX_REPO_URL https://gitlab.knx.org/shared-projects/knx-iot-point-api-public-stack/)
+  set(KNX_IOT_STACK_REPO https://gitlab.knx.org/shared-projects/knx-iot-point-api-public-stack/)
 else()
   set(KNX_REPO knx-iot-stack)
-  set(KNX_REPO_URL https://github.com/KNX-IOT/KNX-IOT-STACK.git)
+  set(KNX_IOT_STACK_REPO https://github.com/KNX-IOT/KNX-IOT-STACK.git)
 endif()
-
-if(DEFINED ENV{KNX_IOT_STACK_REF})
-  set(KNX_IOT_STACK_REF $ENV{KNX_IOT_STACK_REF} CACHE STRING "")
-else()
-  set(KNX_IOT_STACK_REF master CACHE STRING "")
-endif()
-
-if(DEFINED ENV{KNX_IOT_STACK_REPO})
-  set(KNX_IOT_STACK_REPO $ENV{KNX_IOT_STACK_REPO} CACHE STRING "")
-else()
-  set(KNX_IOT_STACK_REPO ${KNX_REPO_URL} CACHE STRING "")
-endif()
-
-set(USE_GITLAB OFF CACHE BOOL "use gitlab as source for KNX IoT Stack")
 
 # KNX IoT Stack
 FetchContent_Declare(
@@ -105,7 +82,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
 
     option(wxBUILD_SHARED "" OFF)
     # compile in the knx iot Router code from the stack
-    # set(OC_IOT_ROUTER_ENABLED ON CACHE BOOL "" FORCE)
+    #set(OC_IOT_ROUTER_ENABLED ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(${KNX_REPO})
 
     add_executable(knx_iot_example
@@ -122,7 +99,8 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
       FetchContent_MakeAvailable(wxWidgets)
     
       add_executable(knx_iot_example_gui WIN32
-        ${PROJECT_SOURCE_DIR}/knx_iot_example.cpp
+        ${PROJECT_SOURCE_DIR}/knx_iot_example_gui.cpp
+        # ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
         ${PROJECT_SOURCE_DIR}/knx_iot_example.c)
       target_link_libraries(knx_iot_example_gui wx::net wx::core wx::base kisClientServer)
       # enable flag to compile the console in, so that the printf of the stack are shown.
@@ -138,7 +116,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
 else()
     set(CASCODA_CHILI2_CONFIG_STRING "DEV_BOARD" CACHE STRING "KNX only supported on Devboard" FORCE)
     set(CASCODA_CHILI2_REV "1" CACHE STRING "KNX only supported for Chili2 Rev 1" FORCE)
-    set(CASCODA_OTA_UPGRADE_ENABLED 0 CACHE BOOL "Enables OTA upgrade" FORCE)
+    set(CASCODA_OTA_UPGRADE_ENABLED 0 CACHE BOOL "Enables OTA upgrade")
     set(USE_DEMO_MODE OFF CACHE BOOL "demo mode (no reset)")
     option(CASCODA_BUILD_KNX "Enable the KNX-IoT Port" ON)
     option(CASCODA_BUILD_BINARIES "Build Binaries" OFF)
@@ -151,8 +129,11 @@ else()
       ${PROJECT_SOURCE_DIR}/knx_iot_example.c
       # KNX-IoT code, common across all platforms
       ${PROJECT_SOURCE_DIR}/knx_iot_example_dev.c
+      ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
       # Embedded specific main loop, which initialises the MCU, communications & then runs the KNX application
       ${PROJECT_SOURCE_DIR}/knx_iot_wakeful_main.c
+      # ${PROJECT_SOURCE_DIR}/KNX_EXAMPLE.c
+      # 
     )
     target_link_libraries(knx_iot_example_ed 
       kisClientServer
@@ -168,8 +149,11 @@ else()
       ${PROJECT_SOURCE_DIR}/knx_iot_example.c
       # KNX-IoT code, common across all platforms
       ${PROJECT_SOURCE_DIR}/knx_iot_example_dev.c
+      ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
       # Embedded specific main loop, which initialises the MCU, communications & then runs the KNX application
       ${PROJECT_SOURCE_DIR}/knx_iot_wakeful_main.c
+      # ${PROJECT_SOURCE_DIR}/KNX_EXAMPLE.c
+      # 
     )
     target_link_libraries(knx_iot_example_reed
       kisClientServer
@@ -185,8 +169,11 @@ else()
       ${PROJECT_SOURCE_DIR}/knx_iot_example.c
       # KNX-IoT code, common across all platforms
       ${PROJECT_SOURCE_DIR}/knx_iot_example_dev.c
+      ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
       # Embedded specific main loop, which initialises the MCU, communications & then runs the KNX application
       ${PROJECT_SOURCE_DIR}/knx_iot_sleepy_main.c
+      # ${PROJECT_SOURCE_DIR}/KNX_EXAMPLE.c
+      # 
     )
     target_link_libraries(knx_iot_example_sleepy 
       kisClientServer
@@ -220,10 +207,6 @@ else()
     math(EXPR HEAP_SIZE_SLEEPY "1024 * (${HEAP_SIZE_BASE_KB})")
     
     # Set the size of the stack and the heap, respectively
-    message(STATUS "Stack Size: ${STACK_SIZE}")
-    message(STATUS "Heap Size ed: ${HEAP_SIZE_ED}")
-    message(STATUS "Heap Size reed: ${HEAP_SIZE_REED}")
-    message(STATUS "Heap Size sleepy: ${HEAP_SIZE_SLEEPY}")
     cascoda_configure_memory(knx_iot_example_ed ${STACK_SIZE} ${HEAP_SIZE_ED})
     cascoda_configure_memory(knx_iot_example_reed ${STACK_SIZE} ${HEAP_SIZE_REED})
     cascoda_configure_memory(knx_iot_example_sleepy ${STACK_SIZE} ${HEAP_SIZE_SLEEPY})

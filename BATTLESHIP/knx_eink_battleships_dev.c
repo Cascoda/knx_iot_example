@@ -285,9 +285,6 @@ void hardware_init()
   DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, LED_ON); 
 #endif
 #endif
-
-  /* Initialize globals */
-  // init_globals();
   /* Eink Initialisation */
   SENSORIF_SPI_Config(SPI_NUM);
   SIF_SSD1681_Initialise();

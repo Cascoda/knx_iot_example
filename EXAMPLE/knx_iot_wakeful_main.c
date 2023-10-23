@@ -235,6 +235,8 @@ int main(void)
 
 	// Hardware specific setup
 	hardware_init();
+	logic_initialize();
+
 
 #if CASCODA_OTA_UPGRADE_ENABLED
 	/* Initialises handling of OTA Firmware Upgrade */

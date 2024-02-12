@@ -42,18 +42,19 @@ set(KNX_IOT_STACK_REF master CACHE STRING "The branch of the KNX IoT Stack to us
 set(USE_GITLAB OFF CACHE BOOL "use gitlab as source for KNX IoT Stack")
 
 if(CASCODA_USE_PRIVATE_SDK)
-  set(CASCODA_REPO cascoda-sdk-priv)
+  set(CASCODA_SDK_REPO https://github.com/Cascoda/cascoda-sdk-priv.git CACHE STRING "")
 else()
-  set(CASCODA_REPO cascoda-sdk)
+  set(CASCODA_SDK_REPO https://github.com/Cascoda/cascoda-sdk.git CACHE STRING "")
 endif()
-set(CASCODA_SDK_REPO https://github.com/Cascoda/${CASCODA_REPO}.git)
+
+set(CASCODA_REPO cascoda-sdk)
 
 if(USE_GITLAB)
   set(KNX_REPO knx-iot-stack-gitlab)
-  set(KNX_IOT_STACK_REPO https://gitlab.knx.org/shared-projects/knx-iot-point-api-public-stack/)
+  set(KNX_IOT_STACK_REPO https://gitlab.knx.org/shared-projects/knx-iot-point-api-public-stack/ CACHE STRING "")
 else()
   set(KNX_REPO knx-iot-stack)
-  set(KNX_IOT_STACK_REPO https://github.com/KNX-IOT/KNX-IOT-STACK.git)
+  set(KNX_IOT_STACK_REPO https://github.com/KNX-IOT/KNX-IOT-STACK.git CACHE STRING "")
 endif()
 
 # KNX IoT Stack
@@ -86,7 +87,8 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
     FetchContent_MakeAvailable(${KNX_REPO})
 
     add_executable(knx_iot_example
-      ${PROJECT_SOURCE_DIR}/knx_iot_example.c )
+      ${PROJECT_SOURCE_DIR}/knx_iot_example.c
+      ${PROJECT_SOURCE_DIR}/knx_iot_example_virtual.c)
     target_link_libraries(knx_iot_example kisClientServer)
 
     if(WIN32)
@@ -101,7 +103,8 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
       add_executable(knx_iot_example_gui WIN32
         ${PROJECT_SOURCE_DIR}/knx_iot_example_gui.cpp
         # ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
-        ${PROJECT_SOURCE_DIR}/knx_iot_example.c)
+        ${PROJECT_SOURCE_DIR}/knx_iot_example.c
+        ${PROJECT_SOURCE_DIR}/knx_iot_example_virtual.c)
       target_link_libraries(knx_iot_example_gui wx::net wx::core wx::base kisClientServer)
       # enable flag to compile the console in, so that the printf of the stack are shown.
       target_compile_definitions(knx_iot_example_gui PUBLIC KNX_GUI)
@@ -113,9 +116,11 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
     endif()
 
 
+
+
 else()
-    set(CASCODA_CHILI2_CONFIG_STRING "DEV_BOARD" CACHE STRING "KNX only supported on Devboard" FORCE)
-    set(CASCODA_CHILI2_REV "1" CACHE STRING "KNX only supported for Chili2 Rev 1" FORCE)
+    set(CASCODA_CHILI2_CONFIG_STRING "DEV_BOARD" CACHE STRING "KNX only supported on Devboard")
+    set(CASCODA_CHILI2_REV "1" CACHE STRING "KNX only supported for Chili2 Rev 1")
     set(CASCODA_OTA_UPGRADE_ENABLED 0 CACHE BOOL "Enables OTA upgrade")
     set(USE_DEMO_MODE OFF CACHE BOOL "demo mode (no reset)")
     option(CASCODA_BUILD_KNX "Enable the KNX-IoT Port" ON)
@@ -132,8 +137,6 @@ else()
       ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
       # Embedded specific main loop, which initialises the MCU, communications & then runs the KNX application
       ${PROJECT_SOURCE_DIR}/knx_iot_wakeful_main.c
-      # ${PROJECT_SOURCE_DIR}/KNX_EXAMPLE.c
-      # 
     )
     target_link_libraries(knx_iot_example_ed 
       kisClientServer
@@ -152,8 +155,6 @@ else()
       ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
       # Embedded specific main loop, which initialises the MCU, communications & then runs the KNX application
       ${PROJECT_SOURCE_DIR}/knx_iot_wakeful_main.c
-      # ${PROJECT_SOURCE_DIR}/KNX_EXAMPLE.c
-      # 
     )
     target_link_libraries(knx_iot_example_reed
       kisClientServer
@@ -172,8 +173,6 @@ else()
       ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
       # Embedded specific main loop, which initialises the MCU, communications & then runs the KNX application
       ${PROJECT_SOURCE_DIR}/knx_iot_sleepy_main.c
-      # ${PROJECT_SOURCE_DIR}/KNX_EXAMPLE.c
-      # 
     )
     target_link_libraries(knx_iot_example_sleepy 
       kisClientServer
@@ -183,6 +182,9 @@ else()
       # Library for interfacing with the devboard
       cascoda-bm-devboard
       )
+
+# include device cmake files, after all the targets have been created so that they may be altered within
+
 
     if(USE_DEMO_MODE)
       target_compile_definitions(knx_iot_example_ed PUBLIC DEMO_MODE)
@@ -199,7 +201,7 @@ else()
       set(STACK_SIZE_KB "5" CACHE STRING "Number of KB to alloc stack")
     endif()
     if(NOT DEFINED HEAP_SIZE_BASE_KB)
-      set(HEAP_SIZE_BASE_KB "40" CACHE STRING "Number of KB to alloc heap")
+      set(HEAP_SIZE_BASE_KB "20" CACHE STRING "Number of KB to alloc heap")
     endif()
     math(EXPR STACK_SIZE "1024 * ${STACK_SIZE_KB}")
     math(EXPR HEAP_SIZE_ED "1024 * (${HEAP_SIZE_BASE_KB})")
@@ -239,12 +241,21 @@ else()
 
 
     if (NOT TARGET copy-ldrom)
+        if (CASCODA_BM_INTERFACE STREQUAL "USB")
         add_custom_target(copy-ldrom ALL DEPENDS ldrom_hid)
         add_custom_command(TARGET copy-ldrom
           POST_BUILD
           COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid ${PROJECT_BINARY_DIR}/bin
           COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid.bin ${PROJECT_BINARY_DIR}/bin
         )
+        elseif (CASCODA_BM_INTERFACE STREQUAL "UART")
+        add_custom_target(copy-ldrom ALL DEPENDS ldrom_uart)
+        add_custom_command(TARGET copy-ldrom
+          POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_uart ${PROJECT_BINARY_DIR}/bin
+          COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_uart.bin ${PROJECT_BINARY_DIR}/bin
+        )
+        endif()
     endif()
 
     if (CASCODA_OTA_UPGRADE_ENABLED EQUAL 1)

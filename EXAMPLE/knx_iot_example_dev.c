@@ -60,25 +60,37 @@
 
 #include "oc_api.h"
 #include "oc_core_res.h"
+#include "api/oc_knx_dev.h"
 #include "api/oc_knx_fp.h"
 #include "port/oc_clock.h"
 #include "port/dns-sd.h"
+#ifndef EXCLUDE_CASCODA_BAREMETAL
+
 #include "cascoda-bm/cascoda_sensorif.h"
 #include "cascoda-bm/cascoda_interface.h"
 #include "cascoda-util/cascoda_tasklet.h"
 #include "cascoda-util/cascoda_time.h"
-#include "devboard_btn.h"
-#include "devboard_btn_ext.h"
+#include "cascoda-bm/cascoda_wait.h"
 #include "ca821x_error.h"
 #include <openthread/thread.h> 
 #include <platform.h>
+
+//#include "sif_btn_ext_pi4ioe5v6408.h"
+
+#include "devboard_btn.h"
+#include "devboard_btn_ext.h"
+ 
 
 #ifdef SLEEPY
 #include "knx_iot_sleepy_main_extern.h"
 #else
 #include "knx_iot_wakeful_main_extern.h"
 #endif
+
+#endif /* EXCLUDE_CASCODA_BAREMETAL */
 #include "knx_iot_example.h"
+
+
 
 // generic defines
 #define SCHEDULE_NOW 0
@@ -88,12 +100,40 @@
 #define THIS_DEVICE 0
 
 #ifdef SLEEPY
-// tick timer upon last wake
-static uint32_t g_time_of_last_wake;
-// tasklet for Thread keep-alive
-static ca_tasklet g_sed_poll_tasklet; 
-extern otInstance *OT_INSTANCE; 
+#include "sed_poll.h"
 #endif
+//
+// code for programming mode and reset
+//
+// forward declarations
+
+enum prog_and_reset_constants
+{
+  RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS = 3000,
+  PROGRAMMING_MODE_INDICATOR_FLASHING_PERIOD_MS = 1000,
+  RESET_VALUE = 2,
+  RESET_INDICATOR_FLICKER_COUNT = 5,
+  RESET_KNX_INDICATOR_FLICKER_PERIOD_MS = 300,
+  RESET_THREAD_INDICATOR_FLICKER_PERIOD_MS = 600,
+};
+
+enum reset_button_state
+{
+  KNX_RESET = 0,
+  THREAD_RESET = 1,
+  IGNORE_FURTHER_ACTION = 2,
+};
+
+enum reset_button_state g_reset_state;
+static ca_error reset_done_feedback(void *context);
+static ca_error programming_mode_handler(void *context);
+static void exit_programming_mode(size_t device_index);
+static void prog_mode_short_press_cb(void *context);
+
+// Tasklet used for flashing LED when in programming mode
+static ca_tasklet g_programming_mode_handler;
+// Tasklet used for flickering LED when reset is done
+static ca_tasklet g_reset_done_indicator;
 
 /**
  * @brief retrieve the fault state of the url/data point
@@ -127,19 +167,6 @@ enum ImplementationDefinedParameters
 {
   PROGRAMMING_MODE_INDICATOR = DEV_SWITCH_3,
   TRIGGER_FOR_PROGRAMMING_MODE_AND_RESET = DEV_SWITCH_4,
-  RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS = 3000,
-  PROGRAMMING_MODE_INDICATOR_FLASHING_PERIOD_MS = 1000,
-  RESET_VALUE = 2,
-  RESET_INDICATOR_FLICKER_COUNT = 5,
-  RESET_KNX_INDICATOR_FLICKER_PERIOD_MS = 300,
-  RESET_THREAD_INDICATOR_FLICKER_PERIOD_MS = 600,
-};
-
-enum reset_button_state
-{
-  KNX_RESET = 0,
-  THREAD_RESET = 1,
-  IGNORE_FURTHER_ACTION = 2,
 };
 
 // ===============================
@@ -150,7 +177,6 @@ enum reset_button_state
 // FORWARD DECLARATIONS
 // ===============================
 
-
 // short LSSB button callback
 void lssb_ShortPress_cb(void *context)
 {
@@ -158,25 +184,13 @@ void lssb_ShortPress_cb(void *context)
   PRINT_APP("LSSB button pressed\n");
   DPT_Switch sw;
   app_get_DPT_Switch_variable(URL_PB_1, &sw);
-  sw = !sw; //invert
+  sw = !sw; // invert
   app_set_DPT_Switch_variable(URL_PB_1, &sw);
   // send out the s-mode message
   oc_do_s_mode_with_scope(5, URL_PB_1, "w");
 }
 
 
-//
-// code for programming mode and reset
-//
-// forward declarations
-enum reset_button_state g_reset_state;
-static ca_error reset_done_feedback(void *context);
-static void exit_programming_mode(size_t device_index);
-
-// Tasklet used for flashing LED when in programming mode
-static ca_tasklet g_programming_mode_handler;
-// Tasklet used for flickering LED when reset is done
-static ca_tasklet g_reset_done_indicator;
 
 // Uncomment the line of code below if you want the test code to execute
 //#define ACTUATOR_TEST_MODE
@@ -205,6 +219,8 @@ void dev_put_callback(const char* url){
   if (strcmp(url, URL_LED_1) == 0) {
         /* update led */ 
         setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_LED_1, NULL));
+        app_set_DPT_Switch_variable(URL_INFOONOFF_1, app_get_DPT_Switch_variable(URL_LED_1, NULL));
+        oc_do_s_mode_with_scope(5, URL_INFOONOFF_1, "w");
   }
 }
 
@@ -219,10 +235,6 @@ void dev_put_callback(const char* url){
  * @param url the url that received a GET invocation.
  */
 void dev_get_callback(const char* url){
-  if (strcmp(url, URL_LED_1) == 0) {
-        /* update led */ 
-        setLED(LED_lsab, *app_get_DPT_Switch_variable(URL_LED_1, NULL));
-  }
 }
 
 //
@@ -301,6 +313,7 @@ static void reset_long_press_cb(void *context)
  * 
  * @param reset_button the (long press) button callback to start the reset procedure
  */
+
 static void reset_init(dvbd_led_btn reset_button)
 {
   // Initializes the tasklet for reset done indicator
@@ -310,6 +323,8 @@ static void reset_init(dvbd_led_btn reset_button)
   DVBD_SetButtonHoldCallback(reset_button, &reset_hold_cb, NULL, RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS);
   DVBD_SetButtonLongPressCallback(reset_button, &reset_long_press_cb, NULL, RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS);
 }
+ 
+
 
 /**
  * @brief reset done
@@ -325,8 +340,11 @@ static ca_error reset_done_feedback(void *context)
   if (count++ < RESET_INDICATOR_FLICKER_COUNT)
   {
     uint8_t led_state = 0;
+
+    
     DVBD_SenseOutput(PROGRAMMING_MODE_INDICATOR, &led_state);
     DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, !(led_state));
+     
 
     if (reset_type == KNX_RESET)
     {
@@ -342,8 +360,10 @@ static ca_error reset_done_feedback(void *context)
     // Reset counter for next time reset happens
     count = 0;
     // This is to make sure that the final iteration always results in the indicator being off
+    
     DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, LED_OFF);
-
+     
+    
     // After the feedback is shown for the Thread Reset, reboot the device.
     if (reset_type == THREAD_RESET)
       BSP_SystemReset(SYSRESET_APROM);
@@ -360,9 +380,13 @@ static ca_error programming_mode_handler(void *context)
 {
   (void)context;
   uint8_t led_state = 0;
+  
+  
+    DVBD_SenseOutput(PROGRAMMING_MODE_INDICATOR, &led_state);
+    DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, !(led_state));
+   
 
-  DVBD_SenseOutput(PROGRAMMING_MODE_INDICATOR, &led_state);
-  DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, !(led_state));
+
 
   TASKLET_ScheduleDelta(&g_programming_mode_handler, PROGRAMMING_MODE_INDICATOR_FLASHING_PERIOD_MS / 2, NULL);
 }
@@ -376,12 +400,16 @@ static ca_error programming_mode_handler(void *context)
 static void exit_programming_mode(size_t device_index)
 {
 #ifdef SLEEPY
-  otLinkModeConfig linkMode = {0};
-  otThreadSetLinkMode(OT_INSTANCE, linkMode);
+  SED_SetMinDelay(1500);
+  SED_SetMaxDelay(SED_POLL_PERIOD);
+  knx_service_sleep_period(SED_POLL_PERIOD);
 #endif
   oc_knx_device_set_programming_mode(device_index, false);
   TASKLET_Cancel(&g_programming_mode_handler);
+
+  
   DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, LED_OFF);
+   
 
   oc_device_info_t* device = oc_core_get_device_info(0);
   knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
@@ -396,8 +424,11 @@ static void exit_programming_mode(size_t device_index)
 static void enter_programming_mode(size_t device_index)
 {
 #ifdef SLEEPY
-  otLinkModeConfig linkMode = {.mRxOnWhenIdle = 1};
-  otThreadSetLinkMode(OT_INSTANCE, linkMode);
+  // When in programming mode, devices must respond within 2 seconds
+  SED_SetMinDelay(250);
+  SED_SetMaxDelay(1500);
+  knx_service_sleep_period(SED_POLL_PERIOD);
+  SED_PollNow();
 #endif
   oc_knx_device_set_programming_mode(device_index, true);
   TASKLET_ScheduleDelta(&g_programming_mode_handler, SCHEDULE_NOW, NULL);
@@ -467,12 +498,14 @@ void reset_embedded(size_t device_index, int reset_value, void *data)
   exit_programming_mode(THIS_DEVICE);
 }
 
+
 /**
  * @brief initalize the knx programming mode functionality
  * 
  * @param flashing_led the led for indication
  * @param program_mode_button the button for long/short press 
  */
+
 static void programming_mode_init(dvbd_led_btn flashing_led, dvbd_led_btn program_mode_button)
 {
 #if !FAKE_SENSOR_DATA
@@ -500,6 +533,7 @@ static void programming_mode_init(dvbd_led_btn flashing_led, dvbd_led_btn progra
   DVBD_SetButtonShortPressCallback(program_mode_button, &prog_mode_short_press_cb, NULL, BTN_SHORTPRESS_RELEASED);
 #endif
 }
+
 
 /**
  * @brief restart the device (application depended)
@@ -543,15 +577,10 @@ static void knx_specific_init()
 
 
 #ifdef SLEEPY
-
 // Sleepy handler for programming mode button
 bool hardware_can_sleep()
 {
-#ifdef SLEEPY
-  return (DVBD_CanSleep() && !oc_knx_device_in_programming_mode(THIS_DEVICE));
-#else
-  return DVBD_CanSleep();
-#endif
+return DVBD_CanSleep();
 }
 
 // Sleepy Device
@@ -559,30 +588,28 @@ void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
 {
   uint32_t taskletTimeLeft = SED_POLL_PERIOD;
 
-  /* Schedule a data poll if one is not already scheduled */
-  if (!TASKLET_IsQueued(&g_sed_poll_tasklet))
-    TASKLET_ScheduleDelta(&g_sed_poll_tasklet, SED_POLL_PERIOD, NULL);
-
   /* schedule wakeup */
   TASKLET_GetTimeToNext(&taskletTimeLeft);
 
   if (taskletTimeLeft > nextAppEvent)
     taskletTimeLeft = nextAppEvent;
 
-  bool has_min_awake_time_passed = TIME_Cmp(TIME_ReadAbsoluteTime(), g_time_of_last_wake + SED_MIN_AWAKE_TIME) >= 0;
-  bool sleep_after_joining = has_min_awake_time_passed || (otThreadGetDeviceRole(OT_INSTANCE) != OT_DEVICE_ROLE_DETACHED);
+  bool sleep_after_joining = otThreadGetDeviceRole(OT_INSTANCE) != OT_DEVICE_ROLE_DETACHED;
 
   /* check that it's worth going to sleep */
   if (taskletTimeLeft > 100 && sleep_after_joining)
   {
     /* and sleep */
-    DVBD_DevboardSleep(taskletTimeLeft, pDeviceRef);
-    g_time_of_last_wake = TIME_ReadAbsoluteTime();
+    DVBD_DevboardSleep(taskletTimeLeft, pDeviceRef); 
   }
 }
 
 void hardware_reinitialise(void)
 {
+#ifdef SLEEPY_USE_LED
+  // hardcoded pin # of sensor board pm mode led
+  BSP_ModuleSetGPIOPin(36, LED_ON);
+#endif
 } 
 #endif // SLEEPY
 
@@ -598,26 +625,25 @@ void hardware_init()
   //app_set_get_cb(dev_get_callback);
 #ifdef SLEEPY
   // Initialize sleepy timeout handler
-  TASKLET_Init(&g_sed_poll_tasklet, &sed_poll_handler);
-  g_time_of_last_wake = TIME_ReadAbsoluteTime(); 
-
+  SED_InitPolling(250, SED_POLL_PERIOD);
 #ifdef SLEEPY_USE_LED
   // Debug: blink programming mode indicator on wakeup
-  DVBD_RegisterLEDOutput(PROGRAMMING_MODE_INDICATOR, JUMPER_POS_1);
-  DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, LED_ON); 
+  // hardcoded pin # of sensor board pm mode led
+	BSP_ModuleRegisterGPIOOutputOD(36, MODULE_PIN_TYPE_LED);
+  BSP_ModuleSetGPIOPin(36, LED_ON);
 #endif
 #endif
   /* Initialize knx-specific development board functionality */
   knx_specific_init();
   DVBD_RegisterButtonInput(DEV_SWITCH_1, JUMPER_POS_1); 
-  DVBD_SetButtonShortPressCallback(DEV_SWITCH_1, &lssb_ShortPress_cb, NULL, BTN_SHORTPRESS_RELEASED);    
+  DVBD_SetButtonShortPressCallback(DEV_SWITCH_1, &lssb_ShortPress_cb, NULL, BTN_SHORTPRESS_RELEASED);     
 
 
 DVBD_RegisterLEDOutput(DEV_SWITCH_2, JUMPER_POS_1);   
 
  
-
   
+
 
 
 
@@ -627,11 +653,7 @@ DVBD_RegisterLEDOutput(DEV_SWITCH_2, JUMPER_POS_1);
 #endif
 
  
-
-
-
 }
-
 
 void setLED(led_t led, bool value)
 {
@@ -648,11 +670,31 @@ void setLED(led_t led, bool value)
  */
 void hardware_poll()
 {
+#ifndef EXCLUDE_CASCODA_BAREMETAL
+  // Needs to be here for the programming mode button
+  // Calling this twice in a row should be safe, as there is edge
+  // detection and it is called in a loop anyways
+  
+  
   DVBD_PollButtons();
+   
+
+
+#endif /* EXCLUDE_CASCODA_BAREMETAL */
+  
+  DVBD_PollButtons();
+   
+
+
+
+
+
+#ifndef EXCLUDE_CASCODA_BAREMETAL
   // Add a delay so we don't poll too fast
   // as this affects the brightness of the 
   // shared LEDs
   WAIT_ms(3);
+#endif /* EXCLUDE_CASCODA_BAREMETAL */
 }
 
 bool app_is_url_in_use(const char* url)
@@ -671,9 +713,7 @@ bool app_is_url_in_use(const char* url)
     }
   }
   return false;
-}
-
- 
+} 
 
 #ifdef ACTUATOR_TEST_MODE
 /* code for actuator testing */
@@ -707,6 +747,9 @@ void actuator_test_init()
 }
 
 #endif // ACTUATOR_TEST_MODE
+
+#ifndef EXCLUDE_CASCODA_BAREMETAL
 //embedded is always built with 
 __attribute__((__weak__)) 
 extern void app_initialize(){}
+#endif /* EXCLUDE_CASCODA_BAREMETAL */

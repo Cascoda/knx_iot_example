@@ -65,7 +65,41 @@ extern "C" {
 
 // URL defines
 #define URL_LED_1 "/p/o_1_1" //!< URL define for LED_1
-#define URL_PB_1 "/p/o_2_2" //!< URL define for PB_1 
+#define URL_PB_1 "/p/o_2_2" //!< URL define for PB_1
+#define URL_INFOONOFF_1 "/p/o_3_3" //!< URL define for InfoOnOff_1
+
+typedef enum DatapointType{
+  DatapointType_bool,
+  DatapointType_int,
+  DatapointType_float,
+  DatapointType_string,
+  DatapointType_DPT_Switch,
+  DatapointType_MAX_NUM,
+} DatapointType;
+
+typedef struct datapoint_t {
+  oc_resource_t resource;
+  const char *const *metadata;
+  const char *feedback_url;
+  DatapointType type;
+  void *g_var;
+  volatile void *g_fault;
+  bool persistent;
+  bool default_present;
+  int num_elements;
+} datapoint_t;
+
+extern const datapoint_t g_datapoints[];
+extern const size_t num_datapoints; 
+
+ 
+
+/**
+ * @brief Returns the datapoint for the given URL
+ *
+ * @param url URL of the datapoint
+ */
+const datapoint_t *get_datapoint_by_url(const char *url); 
 
 ///@defgroup DPT_Switch
 ///@ingroup DPT_Switch
@@ -106,7 +140,7 @@ inline static void setLED_lsab_OFF()  { setLED(LED_lsab, false); }
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- * Callback invoked by the stack when a successfull put is done
+ * Callback invoked by the stack when a successful put is done
  *
  * @param[in] url the url of the put
  *
@@ -130,7 +164,7 @@ typedef struct oc_put_struct_t
 
 void app_set_put_cb(oc_put_cb_t cb);
 /**
- * Callback invoked by the stack when a successfull put is done
+ * Callback invoked by the stack when a successful put is done
  *
  * @param[in] url the url of the put
  *
@@ -176,6 +210,7 @@ int app_set_serial_number(const char* serial_number);
  * @return int 0 if not an array endpoint, else length of array
  */
 int app_get_url_array_size(const char *url);
+
 /**
  * @name DPT_Switch functions
  * getters/setters and other functions for DPT_Switch
@@ -189,6 +224,18 @@ int app_get_url_array_size(const char *url);
  * @return true: url conveys a DPT_Switch
  */
 bool app_is_DPT_Switch_url(const char* url);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Set a DPT_Switch to the default value
+ * 
+ * @param[in] url the url for the DPT_Switch to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Switch_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Switch_default_value(const char* url);
 
 /**
  * @ingroup DPT_Switch
@@ -216,6 +263,7 @@ void app_set_DPT_Switch_variable(const char* url, const DPT_Switch* in);
  * @param[in] in a pointer to the DPT_Switch to copy
  * Can be the global variable itself
  * @param[in] n number of elements in the array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Switch my_arr[5];
@@ -223,7 +271,7 @@ void app_set_DPT_Switch_variable(const char* url, const DPT_Switch* in);
  * app_set_DPT_Switch_array("/some/url", my_arr, 5);
  * ~~~
  */
-void app_set_DPT_Switch_array(const char* url, const DPT_Switch* in, int n);
+void app_set_DPT_Switch_array(const char* url, const DPT_Switch* in, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Switch
@@ -236,6 +284,7 @@ void app_set_DPT_Switch_array(const char* url, const DPT_Switch* in, int n);
  * Can be the global variable itself
  * @param[in] start starting index to write to array
  * @param[in] n number of elements to write to array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Switch my_var;
@@ -244,7 +293,7 @@ void app_set_DPT_Switch_array(const char* url, const DPT_Switch* in, int n);
  * app_set_DPT_Switch_array("/some/url", &my_var, 5, 1);
  * ~~~
  */
-void app_set_DPT_Switch_array_elems(const char* url, const DPT_Switch* in, int start, int n);
+void app_set_DPT_Switch_array_elems(const char* url, const DPT_Switch* in, int start, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Switch
@@ -271,7 +320,7 @@ void app_set_DPT_Switch_array_elems(const char* url, const DPT_Switch* in, int s
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Switch* app_get_DPT_Switch_variable(const char *url, DPT_Switch* out);
+const DPT_Switch* app_get_DPT_Switch_variable(const char *url, DPT_Switch* out);
 
 /**
  * @ingroup DPT_Switch
@@ -299,7 +348,67 @@ const volatile DPT_Switch* app_get_DPT_Switch_variable(const char *url, DPT_Swit
  * // do something with my_arr
  * ~~~
  */
-const volatile DPT_Switch* app_get_DPT_Switch_array(const char *url, DPT_Switch* out, int n);
+const DPT_Switch* app_get_DPT_Switch_array(const char *url, DPT_Switch* out, int n);
+
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Get a DPT_Switch as string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, reserved space to copy the generated text too
+ * @param[in] size size of the allocated text
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_type;
+ * char my_text[100];
+ * if (app_sprintf_DPT_Switch(my_type, my_text, 100) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // printf(my_text);
+ * ~~~
+ */
+int app_sprintf_DPT_Switch(const DPT_Switch *in, char* text, int size);
+
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Get a DPT_Switch from a string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_type;
+ * char my_text[100];
+ * if (app_sscanf_DPT_Switch(&my_type, my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_type
+ * ~~~
+ */
+int app_sscanf_DPT_Switch(DPT_Switch *in, char* text);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Get an example of DPT_Switch in a string
+ * 
+ * @param[in] select 1 = format, 2 = example
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Switch my_type;
+ * char my_text[100];
+ * if (app_str_expected_DPT_Switch(1 , my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * printf(my_text);
+ * ~~~
+ */
+int app_str_expected_DPT_Switch(int select, char* text);
 
 /**
  * @ingroup DPT_Switch
@@ -329,7 +438,7 @@ const volatile DPT_Switch* app_get_DPT_Switch_array(const char *url, DPT_Switch*
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Switch* app_get_DPT_Switch_array_elems(const char *url, DPT_Switch* out, int start, int n);
+const DPT_Switch* app_get_DPT_Switch_array_elems(const char *url, DPT_Switch* out, int start, int n);
 
 /**
  * @ingroup DPT_Switch
@@ -510,7 +619,16 @@ void app_set_bool_variable(const char* url, bool value);
  */
 bool app_retrieve_bool_variable(const char *url);
  
-
+/**
+ * @brief Get a int
+ * 
+ * @param url the url for the int to get
+ * @param value the value to be used for the return value
+ * @return bool, true, value is set
+ */
+bool app_retrieve_int_variable(const char* url, int* value);
+ 
+ 
 /**
  * @brief checks if the url represents a parameter
  *
@@ -582,9 +700,9 @@ void app_str_to_upper(char *str);
  * 
  * @param url the url of the resource/data point
  */
-void dev_btn_toggle_cb(const char *url); 
+void dev_btn_toggle_cb(const char *url);
+ 
 
 #ifdef __cplusplus
 }
 #endif
-

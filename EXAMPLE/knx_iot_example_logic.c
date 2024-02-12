@@ -43,11 +43,13 @@
 #include "api/oc_knx_dev.h"
 #include "api/oc_knx_sec.h"
 #include "api/oc_knx_fp.h"
+#include "port/dns-sd.h"
 #include "oc_knx.h"
+#include "port/dns-sd.h"
+#include "openthread/thread.h"
  
 
 #define SCHEDULE_NOW 0
-
 
 
 

@@ -36,6 +36,9 @@
 
 mkdir -p build
 cd build
-cmake .. -DOC_DNS_SD_ENABLED=OFF -DOC_OSCORE_ENABLED=ON -DUSE_CONSOLE=ON
+cmake .. -DOC_DNS_SD_ENABLED=ON -DOC_OSCORE_ENABLED=ON -DUSE_CONSOLE=ON
 # build step
-cmake --build .
+# default is all targets
+#cmake --build .
+cmake --build . --target knx_iot_example
+cmake --build . --target knx_iot_example_gui

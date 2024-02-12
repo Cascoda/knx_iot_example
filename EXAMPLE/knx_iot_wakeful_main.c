@@ -33,7 +33,7 @@
  * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
 #include <string.h>
@@ -167,10 +167,10 @@ static void ot_state_changed(uint32_t flags, void *context)
 	if (flags & OT_CHANGED_THREAD_ROLE)
 	{
 		otDeviceRole role = otThreadGetDeviceRole(OT_INSTANCE);
-		PRINT("Role: %s\n", otThreadDeviceRoleToString(role));
+		printf("Role: %s\n", otThreadDeviceRoleToString(role));
 	}
 	// publish the MDNS service on startup
-	oc_device_info_t* device = oc_core_get_device_info(0);
+	oc_device_info_t *device = oc_core_get_device_info(0);
 	knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
 
 #ifdef USE_SNTP
@@ -215,6 +215,9 @@ int main(void)
 	oc_clock_time_t next_event;
 	u8_t StartupStatus;
 	struct ca821x_dev dev;
+	char thread_pw[33];
+	uint8_t thread_eui64[8];
+	int error;
 	cascoda_serial_dispatch = ot_serial_dispatch;
 	otError otErr = OT_ERROR_NONE;
 
@@ -224,7 +227,19 @@ int main(void)
 	StartupStatus = EVBMEInitialise(CA_TARGET_NAME, &dev);
 	BSP_RTCInitialise();
 
-	PlatformRadioInitWithDev(&dev);
+	error = knx_get_stored_thread_password(thread_pw);
+	error |= knx_get_stored_eui64(thread_eui64);
+
+	// if the details aren't present, initialise with values generated
+	// on first boot
+	if (error)
+	{
+		PlatformRadioInitWithDev(&dev);
+	}
+	else
+	{
+		PlatformRadioInitWithDevEui64(&dev, thread_eui64);
+	}
 
 	// OpenThread Configuration
 	OT_INSTANCE = otInstanceInitSingle();
@@ -236,7 +251,6 @@ int main(void)
 	// Hardware specific setup
 	hardware_init();
 	logic_initialize();
-
 
 #if CASCODA_OTA_UPGRADE_ENABLED
 	/* Initialises handling of OTA Firmware Upgrade */
@@ -250,19 +264,35 @@ int main(void)
 	do
 	{
 		cascoda_io_handler(&dev);
+		hardware_poll();
 
 		// If the timer has expired, try to join the network
 		if (joinCooldownTimer == 60)
 		{
 			printf("Trying to join Thread network...\n");
 
-			// Print the joiner credentials, delaying for up to 1 second
-			PlatformPrintJoinerCredentials(&dev, OT_INSTANCE, 0);
+			// if the details aren't present, initialise with values generated
+			// on first boot
+			if (error)
+			{
+				// Print the joiner credentials, delaying for up to 1 second
+				PlatformPrintJoinerCredentials(&dev, OT_INSTANCE, 0);
 
-			otErr = PlatformTryJoin(&dev, OT_INSTANCE);
-			if (otErr == OT_ERROR_NONE || otErr == OT_ERROR_ALREADY)
-				break;
-			joinCooldownTimer = 0;
+				otErr = PlatformTryJoin(&dev, OT_INSTANCE);
+				if (otErr == OT_ERROR_NONE || otErr == OT_ERROR_ALREADY)
+					break;
+				joinCooldownTimer = 0;
+			}
+			else
+			{
+				// Print the joiner credentials, delaying for up to 1 second
+				PlatformPrintJoinerCredentialsWithPskd(&dev, OT_INSTANCE, 0, thread_pw);
+
+				otErr = PlatformTryJoinWithPskd(&dev, OT_INSTANCE, thread_pw);
+				if (otErr == OT_ERROR_NONE || otErr == OT_ERROR_ALREADY)
+					break;
+				joinCooldownTimer = 0;
+			}
 		}
 
 		joinCooldownTimer += 1;
@@ -297,7 +327,7 @@ int main(void)
 
 	/* configure the serial number */
 	uint8_t sn[6];
-	int error = knx_get_stored_serial_number(sn);
+	error = knx_get_stored_serial_number(sn);
 	if (error)
 	{
 		PRINT_APP("ERROR: Unique serial number not found! Using default value...\n");
@@ -319,7 +349,7 @@ int main(void)
 				 sn[5]);
 		app_set_serial_number(serial_number_str);
 	}
-	
+
 #ifdef OC_SPAKE
 	char pwd[33];
 	error = knx_get_stored_password(pwd);
@@ -333,7 +363,7 @@ int main(void)
 	{
 		oc_spake_set_password(pwd);
 	}
-	
+
 	uint8_t salt[32], rand[32];
 	uint32_t it;
 	mbedtls_mpi w0;
@@ -382,7 +412,7 @@ int main(void)
 	// this information always gets printed.
 	printf("Device iid: ");
 	oc_print_uint64_t(iid, DEC_REPRESENTATION);
-    printf("\n");
+	printf("\n");
 
 	printf("group publisher table:\n");
 	oc_print_reduced_group_publisher_table();

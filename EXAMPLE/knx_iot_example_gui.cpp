@@ -36,7 +36,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
-// 2023-10-23 13:50:17.491138
+// 2024-02-12 12:32:52.379436
 
 // For compilers that support precompilation, includes "wx/wx.h".
 #include <wx/wxprec.h>
@@ -72,8 +72,9 @@ enum
   CHECK_GRPID_DISPLAY = CHECK_IID_DISPLAY + 1, // grpid display check
   CHECK_SLEEPY = CHECK_GRPID_DISPLAY + 1 , // sleepy check
   CHECK_PM = CHECK_SLEEPY + 1 , // programming mode check in menu bar
-  DP_ID_LED_1 = CHECK_PM + 1, // LED_1 for /p/o_1_1
-  DP_ID_PB_1 = CHECK_PM + 2 // PB_1 for /p/o_2_2
+  DP_IDLED_1 = CHECK_PM + 1, // LED_1 for /p/o_1_1
+  DP_IDPB_1 = CHECK_PM + 2, // PB_1 for /p/o_2_2
+  DP_IDINFOONOFF_1 = CHECK_PM + 3 // InfoOnOff_1 for /p/o_3_3
 };
 
 static const wxCmdLineEntryDesc g_cmdLineDesc[] =
@@ -83,6 +84,11 @@ static const wxCmdLineEntryDesc g_cmdLineDesc[] =
 };
 
 wxCmdLineParser* g_cmd;
+
+
+//----------------------------------------------------
+//----------------------------------------------------
+//----------------------------------------------------
 
 class CustomDialog : public wxDialog
 {
@@ -126,11 +132,136 @@ CustomDialog::CustomDialog(const wxString& title, const wxString& text)
   Destroy();
 }
 
+//----------------------------------------------------
+//----------------------------------------------------
+//----------------------------------------------------
+
 class MyApp : public wxApp
 {
 public:
   virtual bool OnInit();
 };
+
+//----------------------------------------------------
+//----------------------------------------------------
+//----------------------------------------------------
+
+class ScrolledWidgetsPane : public  wxScrolledWindow
+{
+public:
+  wxFrame* m_parentFrame= NULL;
+
+  ScrolledWidgetsPane(wxWindow* parent, wxWindowID id) : wxScrolledWindow(parent, id)
+  {
+    // the sizer will take care of determining the needed scroll size
+    // (if you don't use sizers you will need to manually set the viewport size)
+    wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+
+    int x_width = 230; /* width of the widgets */
+    int x_height = 25; /* height of the widgets */
+    int border_size = 1; /* border size, size between the widgets */
+  //DP_IDLED_1 bool if.a 
+  mLED_1 = new wxCheckBox(this, DP_IDLED_1, _T("LED_1 "), wxPoint(0, 0), wxSize(x_width, x_height)); 
+  mLED_1->Enable(false);
+  {
+    wxTextCtrl* lLED_1_text = new wxTextCtrl(this, -1, _T("LED_1 ('/p/o_1_1') "), wxPoint(0, 0), wxSize(x_width, x_height));
+    lLED_1_text->SetEditable(false);
+    lLED_1_text->SetToolTip("LED_1 urn:knx:dpt.switch ['urn:knx:dpa.417.61']  ");
+    // add sizer for the group.
+     wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
+     vsizer->Add(lLED_1_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     vsizer->Add(mLED_1, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     // add the sizer
+     sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  }          
+  //DP_IDPB_1 bool if.s
+  // if.s  ==> sensor == possible to change value in UI
+  mPB_1 = new wxButton(this, DP_IDPB_1, _T("PB_1"), wxPoint(0, 0), wxSize(x_width, x_height)); 
+  mPB_1->Bind(wxEVT_BUTTON, &ScrolledWidgetsPane::OnPressedPB_1, this);
+  {
+    wxTextCtrl* lPB_1_text = new wxTextCtrl(this, -1, _T("PB_1 ('/p/o_2_2')"), wxPoint(0, 0), wxSize(x_width, x_height));
+    lPB_1_text->SetEditable(false);
+    lPB_1_text->SetToolTip("PB_1 urn:knx:dpt.switch ['urn:knx:dpa.421.61']  ");
+    // add sizer for the group.
+     wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
+     vsizer->Add(lPB_1_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     vsizer->Add(mPB_1, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     // add the sizer
+     sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  }           
+  //DP_IDINFOONOFF_1 bool if.s
+  // if.s  ==> sensor == possible to change value in UI
+  mINFOONOFF_1 = new wxButton(this, DP_IDINFOONOFF_1, _T("InfoOnOff_1"), wxPoint(0, 0), wxSize(x_width, x_height)); 
+  mINFOONOFF_1->Bind(wxEVT_BUTTON, &ScrolledWidgetsPane::OnPressedInfoOnOff_1, this);
+  {
+    wxTextCtrl* lINFOONOFF_1_text = new wxTextCtrl(this, -1, _T("InfoOnOff_1 ('/p/o_3_3')"), wxPoint(0, 0), wxSize(x_width, x_height));
+    lINFOONOFF_1_text->SetEditable(false);
+    lINFOONOFF_1_text->SetToolTip("InfoOnOff_1 urn:knx:dpt.switch ['urn:knx:dpa.417.51']  ");
+    // add sizer for the group.
+     wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
+     vsizer->Add(lINFOONOFF_1_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     vsizer->Add(mINFOONOFF_1, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     // add the sizer
+     sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  }
+  //mINFOONOFF_1->Enable(false);            
+
+    this->SetSizer(sizer);
+    // this part makes the scrollbars show up
+    this->FitInside(); // ask the sizer about the needed size
+    this->SetScrollRate(5, 5);
+  }
+
+  //--------------------------
+  //--------------------------      
+  void OnPressedPB_1(wxCommandEvent& event); 
+  void OnPressedInfoOnOff_1(wxCommandEvent& event); 
+  //DP_IDLED_1 bool
+  wxCheckBox* mLED_1 ; // LED_1 if.a  
+  //DP_IDPB_1 bool
+  wxButton* mPB_1; // PB_1 if.s  
+  //DP_IDINFOONOFF_1 bool
+  wxButton* mINFOONOFF_1; // InfoOnOff_1 if.s  
+}; 
+void ScrolledWidgetsPane::OnPressedPB_1(wxCommandEvent& event)
+{
+  char url[] = "/p/o_2_2";
+  char my_text[100];
+  bool p = (bool)*app_get_DPT_Switch_variable(url, NULL);
+  if (p == true) {
+    p = false;
+  }
+  else {
+    p = true;
+  }
+  app_set_DPT_Switch_variable(url, (DPT_Switch*)&p);
+  oc_do_s_mode_with_scope(2, url, "w");
+  oc_do_s_mode_with_scope(5, url, "w");
+  sprintf(my_text, "PB_1 ('%s') pressed: %d", url, (int)p);
+  this->m_parentFrame->SetStatusText(my_text);
+}  
+void ScrolledWidgetsPane::OnPressedInfoOnOff_1(wxCommandEvent& event)
+{
+  char url[] = "/p/o_3_3";
+  char my_text[100];
+  bool p = (bool)*app_get_DPT_Switch_variable(url, NULL);
+  if (p == true) {
+    p = false;
+  }
+  else {
+    p = true;
+  }
+  app_set_DPT_Switch_variable(url, (DPT_Switch*)&p);
+  oc_do_s_mode_with_scope(2, url, "w");
+  oc_do_s_mode_with_scope(5, url, "w");
+  sprintf(my_text, "InfoOnOff_1 ('%s') pressed: %d", url, (int)p);
+  this->m_parentFrame->SetStatusText(my_text);
+}     
+
+//----------------------------------------------------
+//----------------------------------------------------
+//----------------------------------------------------
+//----------------------------------------------------
 
 class MyFrame : public wxFrame
 {
@@ -148,14 +279,13 @@ private:
   void OnClearTables(wxCommandEvent& event);
   void OnExit(wxCommandEvent& event);
   void OnAbout(wxCommandEvent& event);
-  void OnTimer(wxTimerEvent& event);    
-  void OnPressed_PB_1(wxCommandEvent& event); 
+  void OnTimer(wxTimerEvent& event);
 
   void updateInfoCheckBoxes();
   void updateInfoButtons();
   void updateTextButtons();
   void bool2text(bool on_off, char* text);
-  void int2text(int value, char* text, bool as_ets=true);
+  void int2text(int value, char* text, bool as_ets=false);
   void int2grpidtext(uint64_t value, char* text, bool as_ets);
   void int2scopetext(uint32_t value, char* text);
   void double2text(double value, char* text);
@@ -164,6 +294,7 @@ private:
   wxMenu* m_menuDisplay;
   wxMenu* m_menuOptions;
   wxTimer m_timer;
+  ScrolledWidgetsPane* m_scrolledwindow;
   
   // sleepy information
   int m_sleep_counter = 0;
@@ -175,11 +306,6 @@ private:
   wxTextCtrl* m_ls_text;  // text control for load state
   wxTextCtrl* m_hostname_text; // text control for host name
   wxTextCtrl* m_secured_text; // text secure/not secure
-  //DP_ID_LED_1 bool
-  wxCheckBox* m_LED_1 ; // LED_1 if.a  
-  //DP_ID_PB_1 bool
-  wxButton* m_PB_1; // PB_1 if.s  
-
 };
 
 wxIMPLEMENT_APP(MyApp);
@@ -202,10 +328,9 @@ bool MyApp::OnInit()
   wxString serial_number;
   if (g_cmd->Found("s", &serial_number)) {
   }
-
   MyFrame* frame = new MyFrame((char*)(serial_number.c_str()).AsChar());
-
-  frame->Fit();
+  frame->SetVirtualSize(650, 300);
+  frame->SetSize(700, 400);
   frame->Show(true);
   return true;
 }
@@ -266,48 +391,41 @@ MyFrame::MyFrame(char* str_serial_number)
   Bind(wxEVT_MENU, &MyFrame::OnReset, this, RESET);
   Bind(wxEVT_MENU, &MyFrame::OnAbout, this, wxID_ABOUT);
   Bind(wxEVT_MENU, &MyFrame::OnExit, this, wxID_EXIT);
-  int x_width = 230; /* width of the widgets */
+  int x_width = 350; /* width of the widgets */
   int x_height = 25; /* height of the widgets */
   int max_instances = 1;
-  int max_dp_count = 2;
-  int index;
-  int row;
-  int column;
-  int column_offset = 0;
-  index = 1-1;
-  row = 1 -1;
-  column = (index % max_dp_count) - column_offset;
-  //DP_ID_LED_1 
-  m_LED_1 = new wxCheckBox(this, DP_ID_LED_1, _T("LED_1 ('/p/o_1_1')"), wxPoint(10 + column*x_width, 10 + (x_height*row)), wxSize(x_width, x_height), 0); 
-  m_LED_1->Enable(false);          
-  index = 2-1;
-  row = 1 -1;
-  column = (index % max_dp_count) - column_offset;
-  //DP_ID_PB_1
-  // if.s  ==> sensor == possible to change value in UI
-  m_PB_1 = new wxButton(this, DP_ID_PB_1, _T("PB_1 ('/p/o_2_2')"), wxPoint(10 + column*x_width, 10 + (x_height*row)), wxSize(x_width, x_height), 0); 
-  m_PB_1->Bind(wxEVT_BUTTON, &MyFrame::OnPressed_PB_1, this);           
-
+  int max_dp_count = 3;
+  int border_size = 1;
+  wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+  
+  m_scrolledwindow = new ScrolledWidgetsPane(this, wxID_ANY);
+  sizer->Add(m_scrolledwindow, 1, wxEXPAND);
+  this->SetSizer(sizer);
+  m_scrolledwindow->m_parentFrame = this;
+  
   if (strlen(str_serial_number) > 1) {
     app_set_serial_number(str_serial_number);
   }
-  app_initialize_stack();
-
-  int width_size = 180; /* size of the knx info widgets */
+  // initialize the KNX stack
+  app_initialize_stack(); 
+  // grid for the info of the device
+  wxGridSizer* gridsizer = new wxGridSizer( 4, 2, border_size, border_size);
   // serial number
   char text[500];
   strcpy(text, "Device Serial Number: -sn ");
   oc_device_info_t* device = oc_core_get_device_info(0);
   strcat(text, oc_string(device->serialnumber));
   wxTextCtrl* Statictext;
-  Statictext = new wxTextCtrl(this, wxID_ANY, text, wxPoint(10, 10 + ((max_instances + 1) * x_height)), wxSize(width_size*2, x_height), 0);
+  Statictext = new wxTextCtrl(this, wxID_ANY, text, wxPoint(0, 0), wxSize(x_width, x_height));
   Statictext->SetEditable(false);
+  Statictext->SetToolTip("Serial number of this instance, can be changed on the commandline");
+  gridsizer->Add(Statictext, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
   
   /* QR code
     KNX:S:serno;P:password
     where:
     KNX: is a fixed prefix
-    S: means a KNX serial number follows, serno itself is encodced as 
+    S: means a KNX serial number follows, serno itself is encoded as 
        12 upper-case hexadecimal characters
     P: means a password follows, password itself is just 
        the KNX IoT Point API password; 
@@ -315,50 +433,66 @@ MyFrame::MyFrame(char* str_serial_number)
        with the separator characters colon and semicolon and are in the Alphanumeric range.
   */
   char qrtext[500];
-  strcpy(qrtext, "QR info:   KNX:S:");
+  strcpy(qrtext, "QR (ISO): 41S");
   strcat(qrtext, oc_string(device->serialnumber));
-  strcat(qrtext, ";P:");
+  strcat(qrtext, "+3ZPA:");
   strcat(qrtext, app_get_password());
   app_str_to_upper(qrtext);
   wxTextCtrl* Statictext2;
-  Statictext2 = new wxTextCtrl(this, wxID_ANY, qrtext, wxPoint(10, 10 + ((max_instances + 2) * x_height)), wxSize(width_size*2, x_height), 0);
+  Statictext2 = new wxTextCtrl(this, wxID_ANY, qrtext, wxPoint(0, 0), wxSize(x_width, x_height));
   Statictext2->SetEditable(false);
-
-  // internal address
+  Statictext2->SetToolTip("QR info in ISO format, can be copied paste into ETS");
+  gridsizer->Add(Statictext2, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  // individual address
   sprintf(text, "IA: %d", device->ia);
-  m_ia_text = new wxTextCtrl(this, IA_TEXT, text, wxPoint(10, 10 + ((max_instances + 3) * x_height)), wxSize(width_size, x_height), 0);
+  m_ia_text = new wxTextCtrl(this, IA_TEXT, text, wxPoint(0, 0), wxSize(x_width, x_height));
   m_ia_text->SetEditable(false);
+  m_ia_text->SetToolTip("Individual Address");
+  gridsizer->Add(m_ia_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM  , FromDIP(border_size));
   // installation id
   sprintf(text, "IID: %lld", device->iid);
-  m_iid_text = new wxTextCtrl(this, IID_TEXT, text, wxPoint(10 + width_size, 10 + ((max_instances + 3) * x_height)), wxSize(width_size, x_height), 0);
+  m_iid_text = new wxTextCtrl(this, IID_TEXT, text, wxPoint(0, 0), wxSize(x_width, x_height));
   m_iid_text->SetEditable(false);
+  m_iid_text->SetToolTip("Installation IDentifier");
+  gridsizer->Add(m_iid_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
   // programming mode
   sprintf(text, "Programming Mode: %d", device->pm);
-  m_pm_text = new wxTextCtrl(this, PM_TEXT, text, wxPoint(10, 10 + ((max_instances + 4) * x_height)), wxSize(width_size, x_height), 0);
+  m_pm_text = new wxTextCtrl(this, PM_TEXT, text, wxPoint(0, 0), wxSize(x_width, x_height));
   m_pm_text->SetEditable(false);
+  //m_pm_text->SetToolTip("Programming Mode");
+  gridsizer->Add(m_pm_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
   // installation id
   sprintf(text, "LoadState: %s", oc_core_get_lsm_state_as_string(device->lsm_s));
-  m_ls_text = new wxTextCtrl(this, LS_TEXT, text, wxPoint(10 + width_size, 10 + ((max_instances + 4) * 25)), wxSize(width_size, 25), 0);
+  m_ls_text = new wxTextCtrl(this, LS_TEXT, text, wxPoint(0, 0), wxSize(x_width, x_height));
   m_ls_text->SetEditable(false);
+  //m_ls_text->SetToolTip("LoadState, 'loaded' means in running state");
+  gridsizer->Add(m_ls_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
   // host name
   sprintf(text, "host name: %s", oc_string(device->hostname));
-  m_hostname_text = new wxTextCtrl(this, LS_TEXT, text, wxPoint(10, 10 + ((max_instances + 5) * 25)), wxSize(width_size, 25), 0);
+  m_hostname_text = new wxTextCtrl(this, LS_TEXT, text, wxPoint(0, 0), wxSize(x_width, x_height));
   m_hostname_text->SetEditable(false);
+  m_hostname_text->SetToolTip("Hostname not supported on windows");
+  gridsizer->Add(m_hostname_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
   if (app_is_secure()) {
     strcpy(text, app_get_password());
-    //strcpy(text, "secured");
   }
   else {
     strcpy(text, "unsecured");
   }
-  m_secured_text = new wxTextCtrl(this, LS_TEXT, text, wxPoint(10 + width_size,  10 + ((max_instances + 5) * 25)), wxSize(width_size, 25), wxTE_RICH);
+  // this one should be rich text wxTE_RICH
+  m_secured_text = new wxTextCtrl(this, LS_TEXT, text, wxPoint(0, 0), wxSize(x_width, x_height));
+  gridsizer->Add(m_secured_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
   m_secured_text->SetEditable(false);
+  m_secured_text->SetToolTip("Password if the device is secure");
   if (app_is_secure() == false) {
     m_secured_text->SetStyle(0, 100, (wxTextAttr(*wxRED)));
   }
   // update the UI
-  this->updateInfoCheckBoxes();
+  sizer->Add(gridsizer, 0, wxEXPAND | wxALL, FromDIP(border_size));
+  this->SetSizer(sizer);
+  // initialize the UI with values from the stack
   this->updateTextButtons();
+  this->updateInfoButtons();
   this->updateInfoCheckBoxes();
   // start the timer for UI updates and stack polls
   m_timer.Bind(wxEVT_TIMER, &MyFrame::OnTimer, this);
@@ -591,6 +725,10 @@ void MyFrame::OnPublisherTable(wxCommandEvent& event)
         sprintf(line, "  path: '%s' ", oc_string(entry->path));
         strcat(text, line);
       }
+      if (oc_string_len(entry->at) > 0){
+        sprintf(line, "  at: '%s' ", oc_string(entry->at));
+        strcat(text, line);
+      }
       if ( entry->ga_len > 0) {
         strcpy(line,"  ga : [");
         for (int i = 0; i < entry->ga_len; i++) {
@@ -663,6 +801,10 @@ void MyFrame::OnRecipientTable(wxCommandEvent& event)
         sprintf(line, "  path: '%s' ", oc_string(entry->path));
         strcat(text, line);
       }
+      if (oc_string_len(entry->at) > 0){
+        sprintf(line, "  at: '%s' ", oc_string(entry->at));
+        strcat(text, line);
+      }
       if ( entry->ga_len > 0) {
         strcpy(line,"  ga : [");
         for (int i = 0; i < entry->ga_len; i++) {
@@ -696,6 +838,8 @@ void MyFrame::OnParameterList(wxCommandEvent& event)
   if (device == NULL) {
     return;
   }
+  strcpy(windowtext, "Parameter List ");
+  strcat(windowtext, oc_string(device->serialnumber));
 
   // start looping at 0.
   int index = 0;
@@ -703,6 +847,8 @@ void MyFrame::OnParameterList(wxCommandEvent& event)
   if (url == NULL) {
     strcat(text, "no parameters in this device");
   }
+  bool added = false;
+  
   while (url) {
     sprintf(line, "\nIndex %02d ", index);
     strcat(text, line);
@@ -713,9 +859,12 @@ void MyFrame::OnParameterList(wxCommandEvent& event)
       sprintf(line, "  name: '%s'  ", app_get_parameter_name(index));
       strcat(text, line);
     }
+    added = false;
     if (app_is_DPT_Switch_url(url)) {
       DPT_Switch param_value;
+      memset(&param_value, 0, sizeof(param_value));
       app_get_DPT_Switch_variable(url, &param_value);
+      added = true;
 
       // bool
       sprintf(line, "  value : '%d'  ", param_value);
@@ -729,8 +878,21 @@ void MyFrame::OnParameterList(wxCommandEvent& event)
         strcat(text, line);
       }
     }
-    
-    
+
+    if (added == false) {
+      // type is boolean
+      sprintf(line, " (%d) ", app_retrieve_bool_variable(url));
+      strcat(text, line);
+      {
+        // type is int
+        int value;
+        if (app_retrieve_int_variable(url, &value)) {
+          sprintf(line, " (%d) ", value);
+          strcat(text, line);
+        }
+      }
+    }
+
     //if (app_is_string_url(url)) {
     //  sprintf(line, "  value : '%s'  ", app_retrieve_string_variable(url));
     //  strcat(text, line);
@@ -738,8 +900,7 @@ void MyFrame::OnParameterList(wxCommandEvent& event)
     index++;
     url = app_get_parameter_url(index);
   }
-  strcpy(windowtext, "Parameter List ");
-  strcat(windowtext, oc_string(device->serialnumber));
+
   //wxMessageBox(text, windowtext,
   //  wxOK | wxICON_NONE);
   CustomDialog(windowtext, text);
@@ -787,7 +948,7 @@ void MyFrame::OnAuthTable(wxCommandEvent& event)
             strcat(text, line);
           }
         }
-        if (my_entry->profile == OC_PROFILE_COAP_OSCORE) {
+        if (my_entry->profile == OC_PROFILE_COAP_OSCORE ||my_entry->profile == OC_PROFILE_COAP_PASE) {
           if (oc_byte_string_len(my_entry->osc_id) > 0) {
             sprintf(line, "  osc_id [%d]: ", (int)oc_byte_string_len(my_entry->osc_id));
             strcat(text, line);
@@ -800,20 +961,6 @@ void MyFrame::OnAuthTable(wxCommandEvent& event)
             sprintf(line, "\n");
             strcat(text, line);
           }
-        /*
-          if (oc_byte_string_len(my_entry->osc_rid) > 0) {
-            sprintf(line, "  osc_rid [%d]: ", (int)oc_byte_string_len(my_entry->osc_rid));
-            strcat(text, line);
-            char* ms = oc_string(my_entry->osc_rid);
-            int length = (int)oc_byte_string_len(my_entry->osc_rid);
-            for (int i = 0; i < length; i++) {
-              sprintf(line, "%02x", (unsigned char)ms[i]);
-              strcat(text, line);
-            }
-            sprintf(line, "\n");
-            strcat(text, line);
-          }
-          */
           if (oc_byte_string_len(my_entry->osc_ms) > 0) {
             sprintf(line, "  osc_ms [%d]: ",(int)oc_byte_string_len(my_entry->osc_ms));
             strcat(text, line);
@@ -838,19 +985,10 @@ void MyFrame::OnAuthTable(wxCommandEvent& event)
             sprintf(line, "\n");
             strcat(text, line);
           }
-          /*
-          if (oc_byte_string_len(my_entry->aud) > 0) {
-            sprintf(line, "  osc_aud [%d]: ", (int)oc_byte_string_len(my_entry->aud));
-            char* ms = oc_string(my_entry->aud);
-            int length = (int)oc_byte_string_len(my_entry->aud);
-            for (int i = 0; i < length; i++) {
-              sprintf(line, "%02x", (unsigned char)ms[i]);
-              strcat(text, line);
-            }
-            sprintf(line, "\n");
+          if (oc_string_len(my_entry->sub) > 0) {
+            sprintf(line, "  sub : %s\n", oc_string(my_entry->sub));
             strcat(text, line);
           }
-          */
           if (my_entry->ga_len > 0) {
             sprintf(line, "  osc_ga : [");
             strcat(text, line);
@@ -860,7 +998,7 @@ void MyFrame::OnAuthTable(wxCommandEvent& event)
             sprintf(line, " ]\n");
             strcat(text, line);
           } else {
-            sprintf(line, "  scope : ", my_entry->scope);
+            sprintf(line, "  scope : ");
             this->int2scopetext(my_entry->scope, line);
             strcat(text, line);
             strcat(text, "\n");
@@ -883,13 +1021,13 @@ void MyFrame::OnAuthTable(wxCommandEvent& event)
  */
 void MyFrame::OnAbout(wxCommandEvent& event)
 {
-  char text[500 + (200* 2)];
+  char text[500 + (200* 3)];
   strcpy(text, "KNX Switching example\n");
   strcat(text, "\nDevice Serial Number: ");
   oc_device_info_t* device = oc_core_get_device_info(0);
   strcat(text, oc_string(device->serialnumber));
   strcat(text,"\n");
-  strcat(text,"manufactorer     : cascoda\n");
+  strcat(text,"manufacturer     : cascoda\n");
   strcat(text,"model            : dev board example\n");
   strcat(text,"hardware type    : 000001\n");
   strcat(text,"hardware version : [0, 4, 0]\n");
@@ -898,10 +1036,11 @@ void MyFrame::OnAbout(wxCommandEvent& event)
   strcat(text, "data points:\n");
   strcat(text,"url:/p/o_1_1 rt:urn:knx:dpa.417.61 if:if.a inst:1 name:LED_1\n");
   strcat(text,"url:/p/o_2_2 rt:urn:knx:dpa.421.61 if:if.s inst:1 name:PB_1\n");
+  strcat(text,"url:/p/o_3_3 rt:urn:knx:dpa.417.51 if:if.s inst:1 name:InfoOnOff_1\n");
   strcat(text, "\n");
   
   strcat(text, "(c) Cascoda Ltd\n");
-  strcat(text, "2023-10-23 13:50:17.491138");
+  strcat(text, "2024-02-12 12:32:52.379436");
   CustomDialog("About", text);
 }
 
@@ -958,7 +1097,7 @@ void  MyFrame::updateInfoCheckBoxes()
 {
   bool p;
   p = *app_get_DPT_Switch_variable("/p/o_1_1", NULL); // set toggle of LED_1
-  m_LED_1->SetValue(p);  
+  m_scrolledwindow->mLED_1->SetValue(p);   
 
 }
 
@@ -1089,7 +1228,7 @@ void MyFrame::int2grpidtext(uint64_t value, char* text, bool as_ets)
 /**
  * @brief convert the double (e.g. float)  to text for display
  * 
- * @param value the vlue
+ * @param value the value
  * @param text the text to add info too
  */
 void MyFrame::double2text(double value, char* text)
@@ -1109,26 +1248,17 @@ void  MyFrame::updateInfoButtons()
   bool p;
   int p_int;
   float f;
-  double d;  
+  double d;
+  // name=LED_1 dpt=urn:knx:dpt.switch if=if.a ctype=bool
+  p = (bool)*app_get_DPT_Switch_variable(URL_LED_1, NULL);  
+  // set text of LED_1
+  strcpy(text, "");
+  this->bool2text(p, text);
+  m_scrolledwindow->mLED_1->SetLabel(text); 
 
-} 
-void MyFrame::OnPressed_PB_1(wxCommandEvent& event)
-{
-  char url[] = "/p/o_2_2";
-  char my_text[100];
-  bool p = (bool)*app_get_DPT_Switch_variable(url, NULL);
-  if (p == true) {
-    p = false;
-  }
-  else {
-    p = true;
-  }
-  app_set_DPT_Switch_variable(url, (DPT_Switch*)&p);
-  oc_do_s_mode_with_scope(2, url, "w");
-  oc_do_s_mode_with_scope(5, url, "w");
-  sprintf(my_text, "PB_1 ('%s') pressed: %d", url, (int)p);
-  SetStatusText(my_text);
-}    
+}
+
+
 
 
 

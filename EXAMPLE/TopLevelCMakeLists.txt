@@ -3,19 +3,24 @@ project(knx_iot_demos)
 
 option(CASCODA_USE_PRIVATE_SDK "" OFF)
 
-if(CASCODA_USE_PRIVATE_SDK)
-  set(CASCODA_REPO cascoda-sdk-priv)
-else()
-  set(CASCODA_REPO cascoda-sdk)
-endif()
+set(CASCODA_REPO cascoda-sdk)
 
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
+  if (CASCODA_BM_INTERFACE STREQUAL "USB")
   add_custom_target(copy-ldrom ALL DEPENDS ldrom_hid)
   add_custom_command(TARGET copy-ldrom
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid ${PROJECT_BINARY_DIR}/bin/ldrom_hid
-      COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid.bin ${PROJECT_BINARY_DIR}/bin/ldrom_hid.bin
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid ${PROJECT_BINARY_DIR}/bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_hid.bin ${PROJECT_BINARY_DIR}/bin
   )
+  elseif (CASCODA_BM_INTERFACE STREQUAL "UART")
+  add_custom_target(copy-ldrom ALL DEPENDS ldrom_uart)
+  add_custom_command(TARGET copy-ldrom
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_uart ${PROJECT_BINARY_DIR}/bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ldrom_uart.bin ${PROJECT_BINARY_DIR}/bin
+  )
+  endif()
 
   if (CASCODA_OTA_UPGRADE_ENABLED EQUAL 1)
       add_custom_target(copy-ota-bootloader ALL DEPENDS ota-bootloader)

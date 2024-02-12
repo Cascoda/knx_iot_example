@@ -63,6 +63,7 @@ The general structure of these programs are:
 |------| --------------------| -------- | -------------| ---------------|-----------|
 | "/p/o_1_1"  | LED_1 |  1 |urn:knx:dpa.417.61 | if.a | |
 | "/p/o_2_2"  | PB_1 |  1 |urn:knx:dpa.421.61 | if.s | |
+| "/p/o_3_3"  | InfoOnOff_1 |  1 |urn:knx:dpa.417.51 | if.s | |
 
 ### Parameters
 
@@ -85,12 +86,14 @@ Next to the mandatory metadata fields the following datapoint specific metadata 
 |------| ----------------| ---------| --------- |
 | "/p/o_1_1"  | LED_1 |  desc |On/Off switch 1 |
 | "/p/o_2_2"  | PB_1 |  desc |On/Off push button 1 |
+| "/p/o_3_3"  | InfoOnOff_1 |  desc |Feedback 1 |
 
 For querying the metadata items implemented one can use the following commands:
 
 ```
   GET /p/o_1_1?m=*
   GET /p/o_2_2?m=*
+  GET /p/o_3_3?m=*
 ```
 ## Development Board Jumper settings
 |Jumper | Setting | Usage |

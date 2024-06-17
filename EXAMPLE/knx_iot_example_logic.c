@@ -37,6 +37,7 @@
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
 
+#include <ctype.h>
 #include "knx_iot_example.h"
 #include "cascoda-util/cascoda_tasklet.h"
 #include "oc_core_res.h"
@@ -47,11 +48,16 @@
 #include "oc_knx.h"
 #include "port/dns-sd.h"
 #include "openthread/thread.h"
+#include "openthread/ping_sender.h"
+#include "platform.h"
+#include "manufacturer_storage.h"
  
 
 #define SCHEDULE_NOW 0
 
 
+
+uint8_t user_interaction_occurred = 0;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -67,6 +73,14 @@
 
 void logic_initialize()
 {
-  
  
+}
+
+void logic_role_changed()
+{
+ 
+}
+
+bool logic_is_role_screen()
+{ 
 }

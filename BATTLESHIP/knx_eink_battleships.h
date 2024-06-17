@@ -1,6 +1,6 @@
 /*
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
- Copyright (c) 2022-2023 Cascoda Ltd
+ Copyright (c) 2022-2024 Cascoda Ltd
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  * All rights reserved.
  *
@@ -61,55 +61,106 @@ extern "C" {
 #define PACKED //!< Helper macro to create smaller packed structs
 #endif
 
-#define THIS_DEVICE 0
+#define THIS_DEVICE 0 //!< single device instance, e.g. number 0
 
 // URL defines
-#define URL_SENDSHOT "/p/o_1_1" //!< URL define for SendShot
-#define URL_RECEIVESHOT "/p/o_1_2" //!< URL define for ReceiveShot
-#define URL_SENDSHOTSTATUS "/p/o_1_3" //!< URL define for SendShotStatus
-#define URL_RECEIVESHOTSTATUS "/p/o_1_4" //!< URL define for ReceiveShotStatus
-#define URL_SENDREADY "/p/o_1_5" //!< URL define for SendReady
-#define URL_RECEIVEREADY "/p/o_1_6" //!< URL define for ReceiveReady
-#define URL_STARTING_PLAYER "/p/p_1_1" //!< URL define for Starting_Player 
+#define URL_SENDSHOT "/p/o_1_1" //!< URL "SendShot"  desc:""
+#define URL_RECEIVESHOT "/p/o_1_2" //!< URL "ReceiveShot"  desc:""
+#define URL_SENDSHOTSTATUS "/p/o_1_3" //!< URL "SendShotStatus"  desc:""
+#define URL_RECEIVESHOTSTATUS "/p/o_1_4" //!< URL "ReceiveShotStatus"  desc:""
+#define URL_SENDREADY "/p/o_1_5" //!< URL "SendReady"  desc:""
+#define URL_RECEIVEREADY "/p/o_1_6" //!< URL "ReceiveReady"  desc:""
+#define URL_STARTING_PLAYER "/p/p_1_1" //!< URL "Starting_Player"  desc:""
+
+typedef enum DatapointType{
+  DatapointType_bool,
+  DatapointType_int,
+  DatapointType_float,
+  DatapointType_string,
+  DatapointType_DPT_Param_Bool,
+  DatapointType_DPT_Shot_Status,
+  DatapointType_DPT_Start,
+  DatapointType_DPT_Uint_XY,
+  DatapointType_MAX_NUM,
+} DatapointType;
+
+typedef struct datapoint_t {
+  oc_resource_t resource;
+  const char *const *metadata;
+  const char *feedback_url;
+  DatapointType type;
+  void *g_var;
+  volatile void *g_fault;
+  bool persistent;
+  bool default_present;
+  int num_elements;
+} datapoint_t;
+
+/* all data points */
+extern const datapoint_t g_datapoints[];
+extern const size_t num_datapoints; 
+
+/* all parameters */
+extern const datapoint_t g_parameters[];
+extern const size_t num_parameters; 
+/* ENUM defines, for each module instance */ 
+
+
+/**
+ * @brief Returns the datapoint for the given URL
+ *
+ * @param url URL of the datapoint
+ */
+const datapoint_t *get_datapoint_by_url(const char *url);
+
+/**
+ * @brief Returns the url of the module by instance
+ *
+ * @param out_url URL of the datapoint given back (e.g. with the corrected post fix)
+ * @param in_url URL of the datapoint of the module
+ * @param module_index URL the module index
+ * @return false if operation successful, true if something went wrong 
+ */
+bool get_module_url(char* out_url, const char* in_url, int module_index); 
 
 ///@defgroup DPT_Param_Bool
 ///@ingroup DPT_Param_Bool
 typedef 
-enum DPT_Param_Bool_ValueBool {
-  _DPST600013_F11 = 0,
-  _ValueBool_False = 0,
-  DPT_Param_Bool_ValueBool_False = 0,
-  _DPST600013_F12 = 1,
-  _ValueBool_True = 1,
-  DPT_Param_Bool_ValueBool_True = 1,
+enum DPT_Param_BoolValueBool {
+  DPST_60012_3_F_1_1 = 0,
+  ValueBoolFalse = 0,
+  DPT_Param_BoolValueBoolFalse = 0,
+  DPST_60012_3_F_1_2 = 1,
+  ValueBoolTrue = 1,
+  DPT_Param_BoolValueBoolTrue = 1,
 } DPT_Param_Bool;
 
 ///@defgroup DPT_Shot_Status
 
-enum DPT_Shot_Status_ShipType {
-  _DPST600041_F31 = 0,
-  _ShipType_NoHit = 0,
-  DPT_Shot_Status_ShipType_NoHit = 0,
-  _DPST600041_F32 = 1,
-  _ShipType_Destroyer = 1,
-  DPT_Shot_Status_ShipType_Destroyer = 1,
-  _DPST600041_F33 = 2,
-  _ShipType_Submarine = 2,
-  DPT_Shot_Status_ShipType_Submarine = 2,
-  _DPST600041_F34 = 3,
-  _ShipType_Cruiser = 3,
-  DPT_Shot_Status_ShipType_Cruiser = 3,
-  _DPST600041_F35 = 4,
-  _ShipType_Battleship = 4,
-  DPT_Shot_Status_ShipType_Battleship = 4,
-  _DPST600041_F36 = 5,
-  _ShipType_Carrier = 5,
-  DPT_Shot_Status_ShipType_Carrier = 5,
+enum DPT_Shot_StatusShipType {
+  DPST_60004_1_F_3_1 = 0,
+  ShipTypeNo_Hit = 0,
+  DPT_Shot_StatusShipTypeNo_Hit = 0,
+  DPST_60004_1_F_3_2 = 1,
+  ShipTypeDestroyer = 1,
+  DPT_Shot_StatusShipTypeDestroyer = 1,
+  DPST_60004_1_F_3_3 = 2,
+  ShipTypeSubmarine = 2,
+  DPT_Shot_StatusShipTypeSubmarine = 2,
+  DPST_60004_1_F_3_4 = 3,
+  ShipTypeCruiser = 3,
+  DPT_Shot_StatusShipTypeCruiser = 3,
+  DPST_60004_1_F_3_5 = 4,
+  ShipTypeBattleship = 4,
+  DPT_Shot_StatusShipTypeBattleship = 4,
+  DPST_60004_1_F_3_6 = 5,
+  ShipTypeCarrier = 5,
+  DPT_Shot_StatusShipTypeCarrier = 5,
 }; 
 
 /**
  * @ingroup DPT_Shot_Status
- * DPT_Shot_Status struct with member fields
+ * DPT_Shot_Status struct with member fields for DPT_Shot_Status
  */
 struct DPT_Shot_Status_s {
 
@@ -121,9 +172,9 @@ struct DPT_Shot_Status_s {
   ///@endcond
   ///@name Aliases for DPT_Shot_Status DPST-60004-1_F-1
   ///@{
-    bool _Hit; //!< DPST-60004-1_F-1 member alias Hit for DPT_Shot_Status
-    bool _DPST600041_F1; //!< DPST-60004-1_F-1 member alias DPST-60004-1_F-1 for DPT_Shot_Status
-    bool _F1; //!< DPST-60004-1_F-1 member alias F-1 for DPT_Shot_Status
+    bool Hit; //!< DPST-60004-1_F-1 member alias Hit for DPT_Shot_Status
+    bool DPST_60004_1_F_1; //!< DPST-60004-1_F-1 member alias DPST-60004-1_F-1 for DPT_Shot_Status
+    bool F_1; //!< DPST-60004-1_F-1 member alias F-1 for DPT_Shot_Status
   ///@}
   ///@cond U_END
   } PACKED; //!< union to alias DPST-60004-1_F-1 name variations
@@ -137,9 +188,9 @@ struct DPT_Shot_Status_s {
   ///@endcond
   ///@name Aliases for DPT_Shot_Status DPST-60004-1_F-2
   ///@{
-    bool _Sunk; //!< DPST-60004-1_F-2 member alias Sunk for DPT_Shot_Status
-    bool _DPST600041_F2; //!< DPST-60004-1_F-2 member alias DPST-60004-1_F-2 for DPT_Shot_Status
-    bool _F2; //!< DPST-60004-1_F-2 member alias F-2 for DPT_Shot_Status
+    bool Sunk; //!< DPST-60004-1_F-2 member alias Sunk for DPT_Shot_Status
+    bool DPST_60004_1_F_2; //!< DPST-60004-1_F-2 member alias DPST-60004-1_F-2 for DPT_Shot_Status
+    bool F_2; //!< DPST-60004-1_F-2 member alias F-2 for DPT_Shot_Status
   ///@}
   ///@cond U_END
   } PACKED; //!< union to alias DPST-60004-1_F-2 name variations
@@ -153,9 +204,9 @@ struct DPT_Shot_Status_s {
   ///@endcond
   ///@name Aliases for DPT_Shot_Status DPST-60004-1_F-3
   ///@{
-    enum DPT_Shot_Status_ShipType _ShipType:3; //!< DPST-60004-1_F-3 member alias ShipType for DPT_Shot_Status
-    enum DPT_Shot_Status_ShipType _DPST600041_F3:3; //!< DPST-60004-1_F-3 member alias DPST-60004-1_F-3 for DPT_Shot_Status
-    enum DPT_Shot_Status_ShipType _F3:3; //!< DPST-60004-1_F-3 member alias F-3 for DPT_Shot_Status
+    enum DPT_Shot_StatusShipType ShipType; //!< DPST-60004-1_F-3 member alias ShipType for DPT_Shot_Status
+    enum DPT_Shot_StatusShipType DPST_60004_1_F_3; //!< DPST-60004-1_F-3 member alias DPST-60004-1_F-3 for DPT_Shot_Status
+    enum DPT_Shot_StatusShipType F_3; //!< DPST-60004-1_F-3 member alias F-3 for DPT_Shot_Status
   ///@}
   ///@cond U_END
   } PACKED; //!< union to alias DPST-60004-1_F-3 name variations
@@ -172,7 +223,7 @@ typedef bool DPT_Start;
 
 /**
  * @ingroup DPT_Uint_XY
- * DPT_Uint_XY struct with member fields
+ * DPT_Uint_XY struct with member fields for DPT_Uint_XY
  */
 struct DPT_Uint_XY_s {
 
@@ -184,9 +235,9 @@ struct DPT_Uint_XY_s {
   ///@endcond
   ///@name Aliases for DPT_Uint_XY DPST-60009-1_F-1
   ///@{
-    unsigned int _X:8; //!< DPST-60009-1_F-1 member alias X for DPT_Uint_XY
-    unsigned int _DPST600091_F1:8; //!< DPST-60009-1_F-1 member alias DPST-60009-1_F-1 for DPT_Uint_XY
-    unsigned int _F1:8; //!< DPST-60009-1_F-1 member alias F-1 for DPT_Uint_XY
+    unsigned int X; //!< DPST-60009-1_F-1 member alias X for DPT_Uint_XY
+    unsigned int DPST_60009_1_F_1; //!< DPST-60009-1_F-1 member alias DPST-60009-1_F-1 for DPT_Uint_XY
+    unsigned int F_1; //!< DPST-60009-1_F-1 member alias F-1 for DPT_Uint_XY
   ///@}
   ///@cond U_END
   } PACKED; //!< union to alias DPST-60009-1_F-1 name variations
@@ -200,9 +251,9 @@ struct DPT_Uint_XY_s {
   ///@endcond
   ///@name Aliases for DPT_Uint_XY DPST-60009-1_F-2
   ///@{
-    unsigned int _Y:8; //!< DPST-60009-1_F-2 member alias Y for DPT_Uint_XY
-    unsigned int _DPST600091_F2:8; //!< DPST-60009-1_F-2 member alias DPST-60009-1_F-2 for DPT_Uint_XY
-    unsigned int _F2:8; //!< DPST-60009-1_F-2 member alias F-2 for DPT_Uint_XY
+    unsigned int Y; //!< DPST-60009-1_F-2 member alias Y for DPT_Uint_XY
+    unsigned int DPST_60009_1_F_2; //!< DPST-60009-1_F-2 member alias DPST-60009-1_F-2 for DPT_Uint_XY
+    unsigned int F_2; //!< DPST-60009-1_F-2 member alias F-2 for DPT_Uint_XY
   ///@}
   ///@cond U_END
   } PACKED; //!< union to alias DPST-60009-1_F-2 name variations
@@ -231,8 +282,10 @@ typedef struct DPT_Uint_XY_s DPT_Uint_XY;
 #define BOTTOM_MOST_LINE_Y_COORD EINK_LINE_NO(8)
 // This is the number of lines that will keep scrolling before looping back,
 // after the last line has been displayed.
-#define CONVENIENCE_PADDING_FOR_SCROLLING 3
+#define CONVENIENCE_PADDING_FOR_SCROLLING 0
+#ifndef INITIAL_SCREEN_TIMEOUT
 #define INITIAL_SCREEN_TIMEOUT 0
+#endif
 
 extern bool g_eink_clean_redraw;
 
@@ -267,14 +320,11 @@ struct EinkScreenHandler
   SPLASH_SCREEN = 0,
   MENU_SCREEN = 1,
   QR_SCREEN = 2,
-  GOT_SCREEN = 3,
-  GRT_SCREEN = 4,
-  GPT_SCREEN = 5,
-  AUTH_SCREEN = 6,
-  DEV_SCREEN = 7,
-  RESET_SCREEN = 8,
-  ROLE_SCREEN = 9,
-  TABLES_SCREEN = 10, 
+  DEV_SCREEN = 3,
+  RESET_SCREEN = 4,
+  ROLE_SCREEN = 5,
+  TABLES_SCREEN = 6,
+  HELP_SCREEN = 7, 
   GAME_INTRO,
   CONTROLS_1,
   PLACE_SHIPS,
@@ -294,130 +344,34 @@ struct menu_t{
   void (*onclick)(void);
 };
 
+enum BattDisplaySymbol
+{
+  BATT_DISPLAY_NONE,
+  BATT_DISPLAY_ICON,
+  BATT_DISPLAY_PERCENT,
+  BATT_DISPLAY_END,
+};
+
+extern enum BattDisplaySymbol g_batt_display_symbol;
+
+uint8_t get_batt_percent(void);
+
 /**
  * @brief Draw the nice screen header and frame.
  *
  * @param screen Screen number for the header
  */
-void screen_header_draw(enum Screen);
+void app_header_draw(enum Screen nr);
 
 /**
  * @brief Draw a scrollable menu and highlight
  * the selected item.
  */
-void draw_scrollable_menu(const struct menu_t *menu, int numentries);
+void draw_scrollable_menu(struct menu_t *menu, int numentries, enum Screen nr);
 void menu_next();
 void menu_prev();
 void menu_select();
-
-/**
- * @name QRcode 
- * QRcode struct and register/deregister functions
- */
-/**@{*/
-
-struct qr_code_t {
-  struct qr_code_t *next;
-  const char *str_data;
-  const char *desc;
-};
-
-/**
- * @brief Register a QR code to be displayed on the
- * QR code page of the EINK interface.
- * @note This function retains the pointer to qrcode
- * beyond the end of the function so these MUST be malloc'd or
- * global scope/lifetime.
- *
- * @param qrcode QR code structure to be registered
- *
- * ~~~{.c}
- * void my_init() {
- *   // this function is called ONCE at startup
- *   static struct qr_code_t my_qrcode;
- *   my_qrcode.desc = "My QR code";
- *   my_qrcode.str_data = "Data to embed in QR code";
- *   register_qr_code(&my_qrcode);
- * }
- * ~~~
- */
-void register_qr_code(struct qr_code_t *qrcode);
-/**
- * @brief De-register a QR code from the eink interface
- *
- * @param qrcode QR code to deregister.
- */
-void deregister_qr_code(struct qr_code_t *qrcode);
-/**
- * @brief Check if a QR code is registered to the eink interface
- *
- * @param qrcode QR code to check if registered
- */
-bool qr_code_is_registered(struct qr_code_t *qrcode);
-/**
- * @brief Get the number of QR codes registered
- *
- * @return number of QR codes registered
- */
-uint32_t num_qr_codes();
-/**@}*/
-
-
-/**
- * @name Reset 
- * reset struct and register/deregister functions
- */
-/**@{*/
-struct reset_t {
-  struct reset_t *next;
-  const char *desc;
-  void (*do_reset)(void);
-};
-
-/**
- * @brief Register a reset to be displayed on the
- * reset page of the EINK interface.
- * @note This function retains the pointer to reset
- * beyond the end of the function so these MUST be malloc'd or
- * global scope/lifetime.
- *
- * @param reset QR code structure to be registered
- *
- * ~~~{.c}
- * void my_reset_cb() {
- *   //do some kind of platform specific reset?
- * }
- * void my_init() {
- *   // this function is called ONCE at startup
- *   static struct reset_t my_reset;
- *   my_reset.desc = "My Reset";
- *   my_reset.do_reset = &my_reset_cb;
- *   register_reset(&my_reset);
- * }
- * ~~~
- */
-void register_reset(struct reset_t *reset);
-/**
- * @brief De-register a reset from the eink interface
- *
- * @param reset reset to deregister.
- */
-void deregister_reset(struct reset_t *reset);
-/**
- * @brief Check if a reset is registered to the eink interface
- *
- * @param reset reset to check if registered
- */
-bool reset_is_registered(struct reset_t *reset);
-/**
- * @brief Get the number of resets registered
- *
- * @return number of resets registered
- */
-uint32_t num_resets();
-/**@}*/
-
-extern bool g_clean_redraw;
+void go_CONNECTIVITY_SCREEN();
 
 /**
  * @brief Set the screen to be loaded and redraw.
@@ -459,26 +413,6 @@ inline static void go_MENU_SCREEN() { set_screen(MENU_SCREEN); }
  */
 inline static void go_QR_SCREEN() { set_screen(QR_SCREEN); }
 /**
- * @brief Load the builtin GOT_SCREEN screen immediately
- * Can be used as an eink screen event handler.
- */
-inline static void go_GOT_SCREEN() { set_screen(GOT_SCREEN); }
-/**
- * @brief Load the builtin GRT_SCREEN screen immediately
- * Can be used as an eink screen event handler.
- */
-inline static void go_GRT_SCREEN() { set_screen(GRT_SCREEN); }
-/**
- * @brief Load the builtin GPT_SCREEN screen immediately
- * Can be used as an eink screen event handler.
- */
-inline static void go_GPT_SCREEN() { set_screen(GPT_SCREEN); }
-/**
- * @brief Load the builtin AUTH_SCREEN screen immediately
- * Can be used as an eink screen event handler.
- */
-inline static void go_AUTH_SCREEN() { set_screen(AUTH_SCREEN); }
-/**
  * @brief Load the builtin DEV_SCREEN screen immediately
  * Can be used as an eink screen event handler.
  */
@@ -497,7 +431,12 @@ inline static void go_ROLE_SCREEN() { set_screen(ROLE_SCREEN); }
  * @brief Load the builtin TABLES_SCREEN screen immediately
  * Can be used as an eink screen event handler.
  */
-inline static void go_TABLES_SCREEN() { set_screen(TABLES_SCREEN); } 
+inline static void go_TABLES_SCREEN() { set_screen(TABLES_SCREEN); }
+/**
+ * @brief Load the builtin HELP_SCREEN screen immediately
+ * Can be used as an eink screen event handler.
+ */
+inline static void go_HELP_SCREEN() { set_screen(HELP_SCREEN); } 
 /**
  * @brief Load the user defined GAME_INTRO screen immediately
  * Can be used as an eink screen event handler.
@@ -590,7 +529,7 @@ void button_3_Hold_cb(void *ctx);
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- * Callback invoked by the stack when a successfull put is done
+ * Callback invoked by the stack when a successful put is done
  *
  * @param[in] url the url of the put
  *
@@ -614,7 +553,7 @@ typedef struct oc_put_struct_t
 
 void app_set_put_cb(oc_put_cb_t cb);
 /**
- * Callback invoked by the stack when a successfull put is done
+ * Callback invoked by the stack when a successful put is done
  *
  * @param[in] url the url of the put
  *
@@ -660,6 +599,7 @@ int app_set_serial_number(const char* serial_number);
  * @return int 0 if not an array endpoint, else length of array
  */
 int app_get_url_array_size(const char *url);
+
 /**
  * @name DPT_Param_Bool functions
  * getters/setters and other functions for DPT_Param_Bool
@@ -673,6 +613,18 @@ int app_get_url_array_size(const char *url);
  * @return true: url conveys a DPT_Param_Bool
  */
 bool app_is_DPT_Param_Bool_url(const char* url);
+
+/**
+ * @ingroup DPT_Param_Bool
+ * @brief Set a DPT_Param_Bool to the default value
+ * 
+ * @param[in] url the url for the DPT_Param_Bool to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Param_Bool_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Param_Bool_default_value(const char* url);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -700,6 +652,7 @@ void app_set_DPT_Param_Bool_variable(const char* url, const DPT_Param_Bool* in);
  * @param[in] in a pointer to the DPT_Param_Bool to copy
  * Can be the global variable itself
  * @param[in] n number of elements in the array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Param_Bool my_arr[5];
@@ -707,7 +660,7 @@ void app_set_DPT_Param_Bool_variable(const char* url, const DPT_Param_Bool* in);
  * app_set_DPT_Param_Bool_array("/some/url", my_arr, 5);
  * ~~~
  */
-void app_set_DPT_Param_Bool_array(const char* url, const DPT_Param_Bool* in, int n);
+void app_set_DPT_Param_Bool_array(const char* url, const DPT_Param_Bool* in, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -720,6 +673,7 @@ void app_set_DPT_Param_Bool_array(const char* url, const DPT_Param_Bool* in, int
  * Can be the global variable itself
  * @param[in] start starting index to write to array
  * @param[in] n number of elements to write to array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Param_Bool my_var;
@@ -728,7 +682,7 @@ void app_set_DPT_Param_Bool_array(const char* url, const DPT_Param_Bool* in, int
  * app_set_DPT_Param_Bool_array("/some/url", &my_var, 5, 1);
  * ~~~
  */
-void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* in, int start, int n);
+void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* in, int start, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -755,7 +709,7 @@ void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* i
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_variable(const char *url, DPT_Param_Bool* out);
+const DPT_Param_Bool* app_get_DPT_Param_Bool_variable(const char *url, DPT_Param_Bool* out);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -783,7 +737,67 @@ const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_variable(const char *url, 
  * // do something with my_arr
  * ~~~
  */
-const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_array(const char *url, DPT_Param_Bool* out, int n);
+const DPT_Param_Bool* app_get_DPT_Param_Bool_array(const char *url, DPT_Param_Bool* out, int n);
+
+
+/**
+ * @ingroup DPT_Param_Bool
+ * @brief Get a DPT_Param_Bool as string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, reserved space to copy the generated text too
+ * @param[in] size size of the allocated text
+ * 
+ * ~~~{.c}
+ * DPT_Param_Bool my_type;
+ * char my_text[100];
+ * if (app_sprintf_DPT_Param_Bool(my_type, my_text, 100) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // printf(my_text);
+ * ~~~
+ */
+int app_sprintf_DPT_Param_Bool(const DPT_Param_Bool *in, char* text, int size);
+
+
+/**
+ * @ingroup DPT_Param_Bool
+ * @brief Get a DPT_Param_Bool from a string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Param_Bool my_type;
+ * char my_text[100];
+ * if (app_sscanf_DPT_Param_Bool(&my_type, my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_type
+ * ~~~
+ */
+int app_sscanf_DPT_Param_Bool(DPT_Param_Bool *in, char* text);
+
+/**
+ * @ingroup DPT_Param_Bool
+ * @brief Get an example of DPT_Param_Bool in a string
+ * 
+ * @param[in] select 1 = format, 2 = example
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Param_Bool my_type;
+ * char my_text[100];
+ * if (app_str_expected_DPT_Param_Bool(1 , my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * printf(my_text);
+ * ~~~
+ */
+int app_str_expected_DPT_Param_Bool(int select, char* text);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -813,7 +827,7 @@ const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_array(const char *url, DPT
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_array_elems(const char *url, DPT_Param_Bool* out, int start, int n);
+const DPT_Param_Bool* app_get_DPT_Param_Bool_array_elems(const char *url, DPT_Param_Bool* out, int start, int n);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -863,6 +877,7 @@ bool oc_parse_DPT_Param_Bool_array(oc_rep_t *rep, DPT_Param_Bool *out, int n);
  * @brief Encode a DPT_Param_Bool using oc_rep
  * 
  * @param[in] in The DPT_Param_Bool to encode
+ * @param[is_metadata] is_metadata Whether function is called during metadata query handling
  *
  * ~~~{.c}
  * DPT_Param_Bool my_var;
@@ -875,7 +890,7 @@ bool oc_parse_DPT_Param_Bool_array(oc_rep_t *rep, DPT_Param_Bool *out, int n);
  * uint8_t buf = oc_rep_get_encoder_buf();
  * ~~~
  */
-void oc_encode_DPT_Param_Bool(const DPT_Param_Bool *in);
+void oc_encode_DPT_Param_Bool(const DPT_Param_Bool *in, bool is_metadata);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -967,6 +982,7 @@ bool persistent_load_DPT_Param_Bool(const char *name, DPT_Param_Bool *out);
  */
 bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out, int n);
 /**@}*/
+
 /**
  * @name DPT_Shot_Status functions
  * getters/setters and other functions for DPT_Shot_Status
@@ -980,6 +996,18 @@ bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out,
  * @return true: url conveys a DPT_Shot_Status
  */
 bool app_is_DPT_Shot_Status_url(const char* url);
+
+/**
+ * @ingroup DPT_Shot_Status
+ * @brief Set a DPT_Shot_Status to the default value
+ * 
+ * @param[in] url the url for the DPT_Shot_Status to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Shot_Status_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Shot_Status_default_value(const char* url);
 
 /**
  * @ingroup DPT_Shot_Status
@@ -1007,6 +1035,7 @@ void app_set_DPT_Shot_Status_variable(const char* url, const DPT_Shot_Status* in
  * @param[in] in a pointer to the DPT_Shot_Status to copy
  * Can be the global variable itself
  * @param[in] n number of elements in the array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Shot_Status my_arr[5];
@@ -1014,7 +1043,7 @@ void app_set_DPT_Shot_Status_variable(const char* url, const DPT_Shot_Status* in
  * app_set_DPT_Shot_Status_array("/some/url", my_arr, 5);
  * ~~~
  */
-void app_set_DPT_Shot_Status_array(const char* url, const DPT_Shot_Status* in, int n);
+void app_set_DPT_Shot_Status_array(const char* url, const DPT_Shot_Status* in, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Shot_Status
@@ -1027,6 +1056,7 @@ void app_set_DPT_Shot_Status_array(const char* url, const DPT_Shot_Status* in, i
  * Can be the global variable itself
  * @param[in] start starting index to write to array
  * @param[in] n number of elements to write to array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Shot_Status my_var;
@@ -1035,7 +1065,7 @@ void app_set_DPT_Shot_Status_array(const char* url, const DPT_Shot_Status* in, i
  * app_set_DPT_Shot_Status_array("/some/url", &my_var, 5, 1);
  * ~~~
  */
-void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status* in, int start, int n);
+void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status* in, int start, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Shot_Status
@@ -1062,7 +1092,7 @@ void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status*
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_variable(const char *url, DPT_Shot_Status* out);
+const DPT_Shot_Status* app_get_DPT_Shot_Status_variable(const char *url, DPT_Shot_Status* out);
 
 /**
  * @ingroup DPT_Shot_Status
@@ -1090,7 +1120,67 @@ const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_variable(const char *url
  * // do something with my_arr
  * ~~~
  */
-const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_array(const char *url, DPT_Shot_Status* out, int n);
+const DPT_Shot_Status* app_get_DPT_Shot_Status_array(const char *url, DPT_Shot_Status* out, int n);
+
+
+/**
+ * @ingroup DPT_Shot_Status
+ * @brief Get a DPT_Shot_Status as string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, reserved space to copy the generated text too
+ * @param[in] size size of the allocated text
+ * 
+ * ~~~{.c}
+ * DPT_Shot_Status my_type;
+ * char my_text[100];
+ * if (app_sprintf_DPT_Shot_Status(my_type, my_text, 100) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // printf(my_text);
+ * ~~~
+ */
+int app_sprintf_DPT_Shot_Status(const DPT_Shot_Status *in, char* text, int size);
+
+
+/**
+ * @ingroup DPT_Shot_Status
+ * @brief Get a DPT_Shot_Status from a string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Shot_Status my_type;
+ * char my_text[100];
+ * if (app_sscanf_DPT_Shot_Status(&my_type, my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_type
+ * ~~~
+ */
+int app_sscanf_DPT_Shot_Status(DPT_Shot_Status *in, char* text);
+
+/**
+ * @ingroup DPT_Shot_Status
+ * @brief Get an example of DPT_Shot_Status in a string
+ * 
+ * @param[in] select 1 = format, 2 = example
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Shot_Status my_type;
+ * char my_text[100];
+ * if (app_str_expected_DPT_Shot_Status(1 , my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * printf(my_text);
+ * ~~~
+ */
+int app_str_expected_DPT_Shot_Status(int select, char* text);
 
 /**
  * @ingroup DPT_Shot_Status
@@ -1120,7 +1210,7 @@ const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_array(const char *url, D
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_array_elems(const char *url, DPT_Shot_Status* out, int start, int n);
+const DPT_Shot_Status* app_get_DPT_Shot_Status_array_elems(const char *url, DPT_Shot_Status* out, int start, int n);
 
 /**
  * @ingroup DPT_Shot_Status
@@ -1170,6 +1260,7 @@ bool oc_parse_DPT_Shot_Status_array(oc_rep_t *rep, DPT_Shot_Status *out, int n);
  * @brief Encode a DPT_Shot_Status using oc_rep
  * 
  * @param[in] in The DPT_Shot_Status to encode
+ * @param[is_metadata] is_metadata Whether function is called during metadata query handling
  *
  * ~~~{.c}
  * DPT_Shot_Status my_var;
@@ -1182,7 +1273,7 @@ bool oc_parse_DPT_Shot_Status_array(oc_rep_t *rep, DPT_Shot_Status *out, int n);
  * uint8_t buf = oc_rep_get_encoder_buf();
  * ~~~
  */
-void oc_encode_DPT_Shot_Status(const DPT_Shot_Status *in);
+void oc_encode_DPT_Shot_Status(const DPT_Shot_Status *in, bool is_metadata);
 
 /**
  * @ingroup DPT_Shot_Status
@@ -1274,6 +1365,7 @@ bool persistent_load_DPT_Shot_Status(const char *name, DPT_Shot_Status *out);
  */
 bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *out, int n);
 /**@}*/
+
 /**
  * @name DPT_Start functions
  * getters/setters and other functions for DPT_Start
@@ -1287,6 +1379,18 @@ bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *ou
  * @return true: url conveys a DPT_Start
  */
 bool app_is_DPT_Start_url(const char* url);
+
+/**
+ * @ingroup DPT_Start
+ * @brief Set a DPT_Start to the default value
+ * 
+ * @param[in] url the url for the DPT_Start to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Start_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Start_default_value(const char* url);
 
 /**
  * @ingroup DPT_Start
@@ -1314,6 +1418,7 @@ void app_set_DPT_Start_variable(const char* url, const DPT_Start* in);
  * @param[in] in a pointer to the DPT_Start to copy
  * Can be the global variable itself
  * @param[in] n number of elements in the array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Start my_arr[5];
@@ -1321,7 +1426,7 @@ void app_set_DPT_Start_variable(const char* url, const DPT_Start* in);
  * app_set_DPT_Start_array("/some/url", my_arr, 5);
  * ~~~
  */
-void app_set_DPT_Start_array(const char* url, const DPT_Start* in, int n);
+void app_set_DPT_Start_array(const char* url, const DPT_Start* in, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Start
@@ -1334,6 +1439,7 @@ void app_set_DPT_Start_array(const char* url, const DPT_Start* in, int n);
  * Can be the global variable itself
  * @param[in] start starting index to write to array
  * @param[in] n number of elements to write to array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Start my_var;
@@ -1342,7 +1448,7 @@ void app_set_DPT_Start_array(const char* url, const DPT_Start* in, int n);
  * app_set_DPT_Start_array("/some/url", &my_var, 5, 1);
  * ~~~
  */
-void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int start, int n);
+void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int start, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Start
@@ -1369,7 +1475,7 @@ void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int sta
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Start* app_get_DPT_Start_variable(const char *url, DPT_Start* out);
+const DPT_Start* app_get_DPT_Start_variable(const char *url, DPT_Start* out);
 
 /**
  * @ingroup DPT_Start
@@ -1397,7 +1503,67 @@ const volatile DPT_Start* app_get_DPT_Start_variable(const char *url, DPT_Start*
  * // do something with my_arr
  * ~~~
  */
-const volatile DPT_Start* app_get_DPT_Start_array(const char *url, DPT_Start* out, int n);
+const DPT_Start* app_get_DPT_Start_array(const char *url, DPT_Start* out, int n);
+
+
+/**
+ * @ingroup DPT_Start
+ * @brief Get a DPT_Start as string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, reserved space to copy the generated text too
+ * @param[in] size size of the allocated text
+ * 
+ * ~~~{.c}
+ * DPT_Start my_type;
+ * char my_text[100];
+ * if (app_sprintf_DPT_Start(my_type, my_text, 100) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // printf(my_text);
+ * ~~~
+ */
+int app_sprintf_DPT_Start(const DPT_Start *in, char* text, int size);
+
+
+/**
+ * @ingroup DPT_Start
+ * @brief Get a DPT_Start from a string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Start my_type;
+ * char my_text[100];
+ * if (app_sscanf_DPT_Start(&my_type, my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_type
+ * ~~~
+ */
+int app_sscanf_DPT_Start(DPT_Start *in, char* text);
+
+/**
+ * @ingroup DPT_Start
+ * @brief Get an example of DPT_Start in a string
+ * 
+ * @param[in] select 1 = format, 2 = example
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Start my_type;
+ * char my_text[100];
+ * if (app_str_expected_DPT_Start(1 , my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * printf(my_text);
+ * ~~~
+ */
+int app_str_expected_DPT_Start(int select, char* text);
 
 /**
  * @ingroup DPT_Start
@@ -1427,7 +1593,7 @@ const volatile DPT_Start* app_get_DPT_Start_array(const char *url, DPT_Start* ou
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Start* app_get_DPT_Start_array_elems(const char *url, DPT_Start* out, int start, int n);
+const DPT_Start* app_get_DPT_Start_array_elems(const char *url, DPT_Start* out, int start, int n);
 
 /**
  * @ingroup DPT_Start
@@ -1477,6 +1643,7 @@ bool oc_parse_DPT_Start_array(oc_rep_t *rep, DPT_Start *out, int n);
  * @brief Encode a DPT_Start using oc_rep
  * 
  * @param[in] in The DPT_Start to encode
+ * @param[is_metadata] is_metadata Whether function is called during metadata query handling
  *
  * ~~~{.c}
  * DPT_Start my_var;
@@ -1489,7 +1656,7 @@ bool oc_parse_DPT_Start_array(oc_rep_t *rep, DPT_Start *out, int n);
  * uint8_t buf = oc_rep_get_encoder_buf();
  * ~~~
  */
-void oc_encode_DPT_Start(const DPT_Start *in);
+void oc_encode_DPT_Start(const DPT_Start *in, bool is_metadata);
 
 /**
  * @ingroup DPT_Start
@@ -1581,6 +1748,7 @@ bool persistent_load_DPT_Start(const char *name, DPT_Start *out);
  */
 bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n);
 /**@}*/
+
 /**
  * @name DPT_Uint_XY functions
  * getters/setters and other functions for DPT_Uint_XY
@@ -1594,6 +1762,18 @@ bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n);
  * @return true: url conveys a DPT_Uint_XY
  */
 bool app_is_DPT_Uint_XY_url(const char* url);
+
+/**
+ * @ingroup DPT_Uint_XY
+ * @brief Set a DPT_Uint_XY to the default value
+ * 
+ * @param[in] url the url for the DPT_Uint_XY to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Uint_XY_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Uint_XY_default_value(const char* url);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -1621,6 +1801,7 @@ void app_set_DPT_Uint_XY_variable(const char* url, const DPT_Uint_XY* in);
  * @param[in] in a pointer to the DPT_Uint_XY to copy
  * Can be the global variable itself
  * @param[in] n number of elements in the array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Uint_XY my_arr[5];
@@ -1628,7 +1809,7 @@ void app_set_DPT_Uint_XY_variable(const char* url, const DPT_Uint_XY* in);
  * app_set_DPT_Uint_XY_array("/some/url", my_arr, 5);
  * ~~~
  */
-void app_set_DPT_Uint_XY_array(const char* url, const DPT_Uint_XY* in, int n);
+void app_set_DPT_Uint_XY_array(const char* url, const DPT_Uint_XY* in, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -1641,6 +1822,7 @@ void app_set_DPT_Uint_XY_array(const char* url, const DPT_Uint_XY* in, int n);
  * Can be the global variable itself
  * @param[in] start starting index to write to array
  * @param[in] n number of elements to write to array
+ * @param[in] store_persistently Whether or not the value should also be stored in persistent store.
  * 
  * ~~~{.c}
  * DPT_Uint_XY my_var;
@@ -1649,7 +1831,7 @@ void app_set_DPT_Uint_XY_array(const char* url, const DPT_Uint_XY* in, int n);
  * app_set_DPT_Uint_XY_array("/some/url", &my_var, 5, 1);
  * ~~~
  */
-void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int start, int n);
+void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int start, int n, bool store_persistently);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -1676,7 +1858,7 @@ void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_variable(const char *url, DPT_Uint_XY* out);
+const DPT_Uint_XY* app_get_DPT_Uint_XY_variable(const char *url, DPT_Uint_XY* out);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -1704,7 +1886,67 @@ const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_variable(const char *url, DPT_Ui
  * // do something with my_arr
  * ~~~
  */
-const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_array(const char *url, DPT_Uint_XY* out, int n);
+const DPT_Uint_XY* app_get_DPT_Uint_XY_array(const char *url, DPT_Uint_XY* out, int n);
+
+
+/**
+ * @ingroup DPT_Uint_XY
+ * @brief Get a DPT_Uint_XY as string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, reserved space to copy the generated text too
+ * @param[in] size size of the allocated text
+ * 
+ * ~~~{.c}
+ * DPT_Uint_XY my_type;
+ * char my_text[100];
+ * if (app_sprintf_DPT_Uint_XY(my_type, my_text, 100) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // printf(my_text);
+ * ~~~
+ */
+int app_sprintf_DPT_Uint_XY(const DPT_Uint_XY *in, char* text, int size);
+
+
+/**
+ * @ingroup DPT_Uint_XY
+ * @brief Get a DPT_Uint_XY from a string
+ * 
+ * @param[in] in the data type
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Uint_XY my_type;
+ * char my_text[100];
+ * if (app_sscanf_DPT_Uint_XY(&my_type, my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * // do something with my_type
+ * ~~~
+ */
+int app_sscanf_DPT_Uint_XY(DPT_Uint_XY *in, char* text);
+
+/**
+ * @ingroup DPT_Uint_XY
+ * @brief Get an example of DPT_Uint_XY in a string
+ * 
+ * @param[in] select 1 = format, 2 = example
+ * @param[in] text, the input string
+ * 
+ * ~~~{.c}
+ * DPT_Uint_XY my_type;
+ * char my_text[100];
+ * if (app_str_expected_DPT_Uint_XY(1 , my_text) != 0) {
+ *   //Something went wrong
+ *   return;
+ * }
+ * printf(my_text);
+ * ~~~
+ */
+int app_str_expected_DPT_Uint_XY(int select, char* text);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -1734,7 +1976,7 @@ const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_array(const char *url, DPT_Uint_
  * // do something with my_var
  * ~~~
  */
-const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_array_elems(const char *url, DPT_Uint_XY* out, int start, int n);
+const DPT_Uint_XY* app_get_DPT_Uint_XY_array_elems(const char *url, DPT_Uint_XY* out, int start, int n);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -1784,6 +2026,7 @@ bool oc_parse_DPT_Uint_XY_array(oc_rep_t *rep, DPT_Uint_XY *out, int n);
  * @brief Encode a DPT_Uint_XY using oc_rep
  * 
  * @param[in] in The DPT_Uint_XY to encode
+ * @param[is_metadata] is_metadata Whether function is called during metadata query handling
  *
  * ~~~{.c}
  * DPT_Uint_XY my_var;
@@ -1796,7 +2039,7 @@ bool oc_parse_DPT_Uint_XY_array(oc_rep_t *rep, DPT_Uint_XY *out, int n);
  * uint8_t buf = oc_rep_get_encoder_buf();
  * ~~~
  */
-void oc_encode_DPT_Uint_XY(const DPT_Uint_XY *in);
+void oc_encode_DPT_Uint_XY(const DPT_Uint_XY *in, bool is_metadata);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -1915,7 +2158,16 @@ void app_set_bool_variable(const char* url, bool value);
  */
 bool app_retrieve_bool_variable(const char *url);
  
-
+/**
+ * @brief Get a int
+ * 
+ * @param url the url for the int to get
+ * @param value the value to be used for the return value
+ * @return bool, true, value is set
+ */
+bool app_retrieve_int_variable(const char* url, int* value);
+ 
+ 
 /**
  * @brief checks if the url represents a parameter
  *
@@ -1988,12 +2240,13 @@ void app_str_to_upper(char *str);
  * @param url the url of the resource/data point
  */
 void dev_btn_toggle_cb(const char *url);
+
 void onReceivedShotStatus(const char *url);
 void onReceivedShot(const char *url);
 void onReceivedReady(const char *url);
-void app_initialize(); 
+void app_initialize();
+void eink_load_screen(enum Screen screen_nr); 
 
 #ifdef __cplusplus
 }
 #endif
-

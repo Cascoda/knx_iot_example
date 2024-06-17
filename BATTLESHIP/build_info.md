@@ -25,12 +25,14 @@ CLI:
 
 - knx_eink_battleships Application (CLI) using the following files:
   - knx_eink_battleships.c
+  - knx_eink_battleships_virtual.c
   - knx_eink_battleships.h
 
 Windows GUI using WxWidgets:
 
 - knx_eink_battleships_gui Application (wxWidgets) using the following files:
   - knx_eink_battleships.c
+  - knx_eink_battleships_virtual.c
   - knx_eink_battleships.h
   - knx_eink_battleships.cpp
 

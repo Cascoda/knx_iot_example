@@ -1,6 +1,6 @@
 /*
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
- Copyright (c) 2022-2023 Cascoda Ltd
+ Copyright (c) 2022-2024 Cascoda Ltd
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  * All rights reserved.
  *
@@ -116,6 +116,9 @@ static struct timespec ts;
 #endif
 
 #include <stdio.h> /* defines FILENAME_MAX */
+#include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
 #define STORE_PREFIX "app"
 
 #define MY_NAME "KNX Battleships Demo" /**< The name of the application */
@@ -133,6 +136,10 @@ static CRITICAL_SECTION cs;   /**< event loop variable */
 #define GetCurrentDir getcwd
 #endif
 
+#ifdef HARDWARE_INIT
+ void hardware_init(void);
+#endif /* hardware init */
+
 #define btoa(x) ((x) ? "true" : "false")
 volatile int quit = 0;  /**< stop variable, used by handle_signal */
 bool g_reset = false;   /**< reset variable, set by commandline arguments */
@@ -141,75 +148,46 @@ char g_serial_number[20] = "00fa10010713";
 
 
 
+volatile DPT_Uint_XY gSendShot;   /**< global variable for SendShot */
+volatile DPT_Uint_XY gReceiveShot;   /**< global variable for ReceiveShot */
+volatile DPT_Shot_Status gSendShotStatus;   /**< global variable for SendShotStatus */
+volatile DPT_Shot_Status gReceiveShotStatus;   /**< global variable for ReceiveShotStatus */
+volatile DPT_Start gSendReady;   /**< global variable for SendReady */
+volatile DPT_Start gReceiveReady;   /**< global variable for ReceiveReady */
+volatile DPT_Param_Bool gStarting_Player;   /**< global variable for Starting_Player */
 
-volatile DPT_Uint_XY g_SendShot;   /**< global variable for SendShot */
-volatile DPT_Uint_XY g_ReceiveShot;   /**< global variable for ReceiveShot */
-volatile DPT_Shot_Status g_SendShotStatus;   /**< global variable for SendShotStatus */
-volatile DPT_Shot_Status g_ReceiveShotStatus;   /**< global variable for ReceiveShotStatus */
-volatile DPT_Start g_SendReady;   /**< global variable for SendReady */
-volatile DPT_Start g_ReceiveReady;   /**< global variable for ReceiveReady */
+volatile bool g_faultReceiveShot;   /**< global variable for fault ReceiveShot */
+volatile bool g_faultReceiveShotStatus;   /**< global variable for fault ReceiveShotStatus */
+volatile bool g_faultReceiveReady;   /**< global variable for fault ReceiveReady */
 
-volatile bool g_fault_ReceiveShot;   /**< global variable for fault ReceiveShot */
-volatile bool g_fault_ReceiveShotStatus;   /**< global variable for fault ReceiveShotStatus */
-volatile bool g_fault_ReceiveReady;   /**< global variable for fault ReceiveReady */
-
-
-volatile DPT_Param_Bool g_Starting_Player1;   /**< global variable for Starting_Player */ 
-
+volatile DPT_Param_Bool gStarting_Player1;   /**< global variable for Starting_Player */ 
 
 void
 get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data);
 void
-put_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data);
+put_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data);        
+const size_t num_datapoints = 6; /** number of data points */ 
+const size_t num_parameters = 1; /** number of parameters */
 
-typedef enum DatapointType{
-  DatapointType_bool,
-  DatapointType_int,
-  DatapointType_float,
-  DatapointType_string,
-  DatapointType_DPT_Param_Bool,
-  DatapointType_DPT_Shot_Status,
-  DatapointType_DPT_Start,
-  DatapointType_DPT_Uint_XY, 
-  DatapointType_MAX_NUM,
-} DatapointType;
+oc_resource_dummy_t app_resource_end = {NULL, -1};
+oc_resource_data_t runtime_dataSendShot;
+oc_resource_data_t runtime_dataReceiveShot;
+oc_resource_data_t runtime_dataSendShotStatus;
+oc_resource_data_t runtime_dataReceiveShotStatus;
+oc_resource_data_t runtime_dataSendReady;
+oc_resource_data_t runtime_dataReceiveReady;
+oc_resource_data_t runtime_dataStarting_Player; 
 
-typedef struct datapoint_t {
-  oc_resource_t resource;
-  const char *const *metadata;
-  const char *feedback_url;
-  DatapointType type;
-  volatile void *g_var;
-  volatile void *g_fault;
-  bool persistent;
-  int num_elements;
-} datapoint_t;
+#if defined _MSC_VER && !defined __INTEL_COMPILER
+_Pragma("warning(disable:4090)")
+#elif defined(__GNUC__)
+_Pragma("GCC diagnostic push")
+_Pragma("GCC diagnostic ignored \"-Wdiscarded-array-qualifiers\"")
+#endif
 
-
- 
- 
- 
- 
- 
- 
-  
-
-extern const datapoint_t g_datapoints[];
-const size_t num_datapoints = 6; 
-
-extern const datapoint_t g_parameters[];
-const size_t num_parameters = 1; 
-oc_resource_dummy_t app_resource_end;
-oc_resource_data_t runtime_data_SendShot;
-oc_resource_data_t runtime_data_ReceiveShot;
-oc_resource_data_t runtime_data_SendShotStatus;
-oc_resource_data_t runtime_data_ReceiveShotStatus;
-oc_resource_data_t runtime_data_SendReady;
-oc_resource_data_t runtime_data_ReceiveReady;
-oc_resource_data_t runtime_data_Starting_Player; 
 
 const datapoint_t g_datapoints[6] = {
-  /*[0] = */{
+  /*[0] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[1].resource,
       /*device*/ 0,
@@ -217,7 +195,7 @@ const datapoint_t g_datapoints[6] = {
       /*uri*/ oc_string_create_const("/p/o_1_1"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.101" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.uint_XY"),
-      /*interfaces*/ OC_IF_O,
+      /*interfaces*/ OC_IF_D | OC_IF_O,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[0]},
@@ -229,17 +207,18 @@ const datapoint_t g_datapoints[6] = {
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_data_SendShot
+      /*runtime_data*/ &runtime_dataSendShot
     },
     /*.metadata =*/ NULL,
     /*.feedback_url =*/NULL, 
     /*.type =*/ DatapointType_DPT_Uint_XY,
-    /*.g_var =*/ (void*)&g_SendShot,
+    /*.g_var =*/ (void*)&gSendShot,
     /*.g_fault =*/ NULL,
     /*.persistent =*/ false,
+    /*.default_present =*/ false,
     /*.num_elements =*/ 0
   },
-  /*[1] = */{
+  /*[1] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[2].resource,
       /*device*/ 0,
@@ -247,7 +226,7 @@ const datapoint_t g_datapoints[6] = {
       /*uri*/ oc_string_create_const("/p/o_1_2"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65501.111" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.uint_XY"),
-      /*interfaces*/ OC_IF_I,
+      /*interfaces*/ OC_IF_D | OC_IF_I,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[1]},
@@ -259,17 +238,18 @@ const datapoint_t g_datapoints[6] = {
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_data_ReceiveShot
+      /*runtime_data*/ &runtime_dataReceiveShot
     },
     /*.metadata =*/ NULL,
     /*.feedback_url =*/NULL, 
     /*.type =*/ DatapointType_DPT_Uint_XY,
-    /*.g_var =*/ (void*)&g_ReceiveShot,
-    /*.g_fault =*/ &g_fault_ReceiveShot,
+    /*.g_var =*/ (void*)&gReceiveShot,
+    /*.g_fault =*/ &g_faultReceiveShot,
     /*.persistent =*/ false,
+    /*.default_present =*/ false,
     /*.num_elements =*/ 0
   },
-  /*[2] = */{
+  /*[2] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[3].resource,
       /*device*/ 0,
@@ -277,7 +257,7 @@ const datapoint_t g_datapoints[6] = {
       /*uri*/ oc_string_create_const("/p/o_1_3"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65501.102" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.shot_Status"),
-      /*interfaces*/ OC_IF_O,
+      /*interfaces*/ OC_IF_D | OC_IF_O,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[2]},
@@ -289,17 +269,18 @@ const datapoint_t g_datapoints[6] = {
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_data_SendShotStatus
+      /*runtime_data*/ &runtime_dataSendShotStatus
     },
     /*.metadata =*/ NULL,
     /*.feedback_url =*/NULL, 
     /*.type =*/ DatapointType_DPT_Shot_Status,
-    /*.g_var =*/ (void*)&g_SendShotStatus,
+    /*.g_var =*/ (void*)&gSendShotStatus,
     /*.g_fault =*/ NULL,
     /*.persistent =*/ false,
+    /*.default_present =*/ false,
     /*.num_elements =*/ 0
   },
-  /*[3] = */{
+  /*[3] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[4].resource,
       /*device*/ 0,
@@ -307,7 +288,7 @@ const datapoint_t g_datapoints[6] = {
       /*uri*/ oc_string_create_const("/p/o_1_4"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.112" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.shot_Status"),
-      /*interfaces*/ OC_IF_I,
+      /*interfaces*/ OC_IF_D | OC_IF_I,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[3]},
@@ -319,17 +300,18 @@ const datapoint_t g_datapoints[6] = {
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_data_ReceiveShotStatus
+      /*runtime_data*/ &runtime_dataReceiveShotStatus
     },
     /*.metadata =*/ NULL,
     /*.feedback_url =*/NULL, 
     /*.type =*/ DatapointType_DPT_Shot_Status,
-    /*.g_var =*/ (void*)&g_ReceiveShotStatus,
-    /*.g_fault =*/ &g_fault_ReceiveShotStatus,
+    /*.g_var =*/ (void*)&gReceiveShotStatus,
+    /*.g_fault =*/ &g_faultReceiveShotStatus,
     /*.persistent =*/ false,
+    /*.default_present =*/ false,
     /*.num_elements =*/ 0
   },
-  /*[4] = */{
+  /*[4] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[5].resource,
       /*device*/ 0,
@@ -337,7 +319,7 @@ const datapoint_t g_datapoints[6] = {
       /*uri*/ oc_string_create_const("/p/o_1_5"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.103" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.start"),
-      /*interfaces*/ OC_IF_O,
+      /*interfaces*/ OC_IF_D | OC_IF_O,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[4]},
@@ -349,17 +331,18 @@ const datapoint_t g_datapoints[6] = {
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_data_SendReady
+      /*runtime_data*/ &runtime_dataSendReady
     },
     /*.metadata =*/ NULL,
     /*.feedback_url =*/NULL, 
     /*.type =*/ DatapointType_DPT_Start,
-    /*.g_var =*/ (void*)&g_SendReady,
+    /*.g_var =*/ (void*)&gSendReady,
     /*.g_fault =*/ NULL,
     /*.persistent =*/ false,
+    /*.default_present =*/ false,
     /*.num_elements =*/ 0
   },
-  /*[5] = */{
+  /*[5] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/(oc_resource_t*)&g_parameters[0].resource,
       /*device*/ 0,
@@ -367,7 +350,7 @@ const datapoint_t g_datapoints[6] = {
       /*uri*/ oc_string_create_const("/p/o_1_6"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65501.113" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.start"),
-      /*interfaces*/ OC_IF_I,
+      /*interfaces*/ OC_IF_D | OC_IF_I,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[5]},
@@ -379,19 +362,20 @@ const datapoint_t g_datapoints[6] = {
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_data_ReceiveReady
+      /*runtime_data*/ &runtime_dataReceiveReady
     },
     /*.metadata =*/ NULL,
     /*.feedback_url =*/NULL, 
     /*.type =*/ DatapointType_DPT_Start,
-    /*.g_var =*/ (void*)&g_ReceiveReady,
-    /*.g_fault =*/ &g_fault_ReceiveReady,
+    /*.g_var =*/ (void*)&gReceiveReady,
+    /*.g_fault =*/ &g_faultReceiveReady,
     /*.persistent =*/ false,
+    /*.default_present =*/ false,
     /*.num_elements =*/ 0
   }, 
 }; 
 const datapoint_t g_parameters[1] = {
-  /*[7] =*/ {
+  /* 1 (saved=1)[7] =*/ {
     /* .resource=*/ { 
       /*next*/(oc_resource_t*)&app_resource_end,
       /*device*/ 0,
@@ -399,9 +383,9 @@ const datapoint_t g_parameters[1] = {
       /*uri*/ oc_string_create_const("/p/p_1_1"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.201" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.param_Bool"),
-      /*interfaces*/ OC_IF_P,
+      /*interfaces*/ OC_IF_D | OC_IF_P,
       /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_DISCOVERABLE,
+      /*properties*/ OC_UNDISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_parameters[0]},
       /*put_handler*/ {put_generic, (void*)&g_parameters[0]},
       /*post_handler*/ {NULL, NULL},
@@ -411,28 +395,44 @@ const datapoint_t g_parameters[1] = {
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_data_Starting_Player
+      /*runtime_data*/ &runtime_dataStarting_Player
     },
     /*.metadata =*/ NULL,
     /*.feedback_url =*/ NULL, 
-    
-    
-    // param can't be booleans: {param_type }}
-    /*.type =*/ DatapointType_int,
-    /*.g_var =*/ (void*)&g_Starting_Player1,
+    /*.type =*/ DatapointType_DPT_Param_Bool,
+    /*.g_var =*/ (void*)&gStarting_Player1,
     /*.g_fault =*/ NULL,
     /*.persistent =*/ true,
+    /*.default_present =*/ false,
     /*.num_elements =*/ 0
   }, 
-}; 
+};     
+/* 
+  total saved parameters/datapoints = 1
+  total group object entries        = 
+  total publisher entries           = 
+  total receiver entries            = 
+  total auth entries                = 
+  total SSN entries                 = 
+  ---------------------------------------- +
+  total files                       = 101
+*/
 
-typedef const volatile void* (*app_get_variable_fn)(const char*, void*);
-typedef const volatile void* (*app_get_array_fn)(const char*, void*, int);
-typedef const volatile void* (*app_get_array_elems_fn)(const char*, void*, int start, int n);
+
+#if defined _MSC_VER && !defined __INTEL_COMPILER
+_Pragma("warning(default:4090)")
+#elif defined(__GNUC__)
+_Pragma("GCC diagnostic pop")
+#endif
+
+typedef const void* (*app_get_variable_fn)(const char*, void*);
+typedef const void* (*app_get_array_fn)(const char*, void*, int);
+typedef const void* (*app_get_array_elems_fn)(const char*, void*, int start, int n);
+typedef void (*app_set_default_value_fn)(const char*);
 typedef void (*app_set_variable_fn)(const char*, const void*);
-typedef void (*app_set_array_fn)(const char*, const void*, int n);
-typedef void (*app_set_array_elems_fn)(const char*, const void*, int start, int n);
-typedef void (*oc_encode_fn)(const void*);
+typedef void (*app_set_array_fn)(const char*, const void*, int n, bool store_persistently);
+typedef void (*app_set_array_elems_fn)(const char*, const void*, int start, int n, bool store_persistently);
+typedef void (*oc_encode_fn)(const void*, bool is_metadata);
 typedef void (*oc_encode_array_fn)(const void*, int n);
 typedef void (*oc_encode_array_fn)(const void*, int n);
 typedef bool (*oc_parse_fn)(oc_rep_t *rep, void *out);
@@ -445,6 +445,7 @@ struct datapoint_type_t {
   app_get_variable_fn app_get_variable;
   app_get_array_fn app_get_array;
   app_get_array_elems_fn app_get_array_elems;
+  app_set_default_value_fn app_set_default_value;
   app_set_variable_fn app_set_variable;
   app_set_array_fn app_set_array;
   app_set_array_elems_fn app_set_array_elems;
@@ -462,10 +463,11 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
   {sizeof(float)},
   {sizeof(char*)},
   {
-    sizeof(DPT_Param_Bool),
+    sizeof(DPT_Param_Bool),   // DPT_Param_Bool DPT_Param_Bool
     (app_get_variable_fn)app_get_DPT_Param_Bool_variable,
     (app_get_array_fn)app_get_DPT_Param_Bool_array,
     (app_get_array_elems_fn)app_get_DPT_Param_Bool_array_elems,
+    (app_set_default_value_fn)app_set_DPT_Param_Bool_default_value,
     (app_set_variable_fn)app_set_DPT_Param_Bool_variable,
     (app_set_array_fn)app_set_DPT_Param_Bool_array,
     (app_set_array_elems_fn)app_set_DPT_Param_Bool_array_elems,
@@ -477,10 +479,11 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
     (persistent_load_array_fn)persistent_load_DPT_Param_Bool_array,
   },
   {
-    sizeof(DPT_Shot_Status),
+    sizeof(DPT_Shot_Status),   // DPT_Shot_Status DPT_Shot_Status
     (app_get_variable_fn)app_get_DPT_Shot_Status_variable,
     (app_get_array_fn)app_get_DPT_Shot_Status_array,
     (app_get_array_elems_fn)app_get_DPT_Shot_Status_array_elems,
+    (app_set_default_value_fn)app_set_DPT_Shot_Status_default_value,
     (app_set_variable_fn)app_set_DPT_Shot_Status_variable,
     (app_set_array_fn)app_set_DPT_Shot_Status_array,
     (app_set_array_elems_fn)app_set_DPT_Shot_Status_array_elems,
@@ -492,10 +495,11 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
     (persistent_load_array_fn)persistent_load_DPT_Shot_Status_array,
   },
   {
-    sizeof(DPT_Start),
+    sizeof(DPT_Start),   // DPT_Start DPT_Start
     (app_get_variable_fn)app_get_DPT_Start_variable,
     (app_get_array_fn)app_get_DPT_Start_array,
     (app_get_array_elems_fn)app_get_DPT_Start_array_elems,
+    (app_set_default_value_fn)app_set_DPT_Start_default_value,
     (app_set_variable_fn)app_set_DPT_Start_variable,
     (app_set_array_fn)app_set_DPT_Start_array,
     (app_set_array_elems_fn)app_set_DPT_Start_array_elems,
@@ -507,10 +511,11 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
     (persistent_load_array_fn)persistent_load_DPT_Start_array,
   },
   {
-    sizeof(DPT_Uint_XY),
+    sizeof(DPT_Uint_XY),   // DPT_Uint_XY DPT_Uint_XY
     (app_get_variable_fn)app_get_DPT_Uint_XY_variable,
     (app_get_array_fn)app_get_DPT_Uint_XY_array,
     (app_get_array_elems_fn)app_get_DPT_Uint_XY_array_elems,
+    (app_set_default_value_fn)app_set_DPT_Uint_XY_default_value,
     (app_set_variable_fn)app_set_DPT_Uint_XY_variable,
     (app_set_array_fn)app_set_DPT_Uint_XY_array,
     (app_set_array_elems_fn)app_set_DPT_Uint_XY_array_elems,
@@ -542,7 +547,7 @@ static const char *get_datapoint_dpt(const datapoint_t *dp) {
 static const char *get_datapoint_dpa(const datapoint_t *dp) {
   for (int i = 0; i < oc_string_array_size(dp->resource.types); i++) {
     const char *rt = oc_string_array(dp->resource.types)[i];
-    if (strstr("dpa.", rt) != NULL)
+    if (strstr(rt, "dpa.") != NULL)
       return rt;
   }
   return NULL;
@@ -552,7 +557,7 @@ static const char *const *get_datapoint_metadata(const datapoint_t *dp) {
   return dp->metadata;
 }
 
-static bool oc_encode_datapoint(const datapoint_t *dp, int pn, int ps) {
+static bool oc_encode_datapoint(const datapoint_t *dp, int pn, int ps, bool is_metadata) {
   size_t count = dp->num_elements;
   const struct datapoint_type_t *dpt = &g_datapoint_types[dp->type];
   int n = ps;
@@ -574,7 +579,7 @@ static bool oc_encode_datapoint(const datapoint_t *dp, int pn, int ps) {
   if (ps > 1) 
     g_datapoint_types[dp->type].oc_encode_array(var, n);
   else 
-    g_datapoint_types[dp->type].oc_encode(var);
+    g_datapoint_types[dp->type].oc_encode(var, is_metadata);
   
   free(var);
   return true;
@@ -596,33 +601,45 @@ static bool oc_parse_datapoint(const datapoint_t *dp, oc_rep_t *rep, void *out, 
   } 
 }
 
-static void datapoint_set(const datapoint_t *dp, void *in, int start, int n) 
+void datapoint_set(const datapoint_t *dp, void *in, int start, int n) 
 {
   if (in == NULL)
     return;
   if (start > 0 || n > 1){
     if (g_datapoint_types[dp->type].app_set_array)
-      g_datapoint_types[dp->type].app_set_array_elems(get_datapoint_url(dp), in, start, n);
+      g_datapoint_types[dp->type].app_set_array_elems(get_datapoint_url(dp), in, start, n, true);
   }
   else
     if (g_datapoint_types[dp->type].app_set_variable)
       g_datapoint_types[dp->type].app_set_variable(get_datapoint_url(dp), in);
 }
 
-static const datapoint_t *get_datapoint_by_url(const char *url) {
+const datapoint_t *get_datapoint_by_url(const char *url) {
   //this can likely be optimised in the future for speed
   //with a binary search or similar
-for(int i = 0; i < num_datapoints; i++) {
-    const datapoint_t *it = &g_datapoints[i];
-    const char *_url = get_datapoint_url(it);
-    if (strcmp(_url, url) == 0) {
-      return it;
+  
+  bool is_param = false;
+  if (strncmp(url,"/p/p",4) == 0) {
+    is_param = true;
+  }
+  
+
+  if (is_param == false) {
+    for(int i = 0; i < num_datapoints; i++) {
+      const datapoint_t *it = &g_datapoints[i];
+      const char *_url = get_datapoint_url(it);
+      // it always start with /p/<url>
+      if (strcmp((char *)&_url[3], (char *)&url[3]) == 0) {
+        return it;
+      }
     }
   } 
-for(int i = 0; i < num_parameters; i++) {
+
+  for(int i = 0; i < num_parameters; i++) {
     const datapoint_t *it = &g_parameters[i];
     const char *_url = get_datapoint_url(it);
-    if (strcmp(_url, url) == 0) {
+    // it always start with /p/p<url>
+    if (strcmp((char*)&_url[4], (char*)&url[4]) == 0) {
       return it;
     }
   } 
@@ -637,6 +654,41 @@ int app_get_url_array_size(const char *url)
   return dp->num_elements;
 }
 
+bool get_module_url(char* out_url, const char* in_url, int module_index)
+{
+  int digits_after_underscore = 0;
+  size_t url_length = strlen(in_url);
+  size_t keep_len;
+  char temp[50];
+      
+  // Find out how many more digits we have after the underscore
+  for (int i = url_length - 1; i >= 0; --i)
+  {
+      // We have reached the underscore, we can stop counting
+      if (*(in_url + i) == '_')
+          break; 
+          
+      // We have counted one more digit after the underscore
+      if (isdigit(*(in_url + i)))
+          ++digits_after_underscore;
+      else // We have encountered a non-digit and non-underscore, which is unexpected.
+          return true; 
+  }
+  
+  // We can now calculate the number of characters that we need to keep from the original URL
+  keep_len = url_length - digits_after_underscore;
+  
+  // Copy over those characters into a temp array
+  strncpy(temp, in_url, keep_len);
+  temp[keep_len] = '\0';
+  
+  // Add the module number at the end, and set the out_url pointer
+  sprintf(temp + strlen(temp), "%d", module_index);
+  strcpy(out_url, temp);
+  
+  return false;
+}
+
 // Getters/Setters for DPT_Param_Bool
 
 bool app_is_DPT_Param_Bool_url(const char* url)
@@ -646,14 +698,19 @@ bool app_is_DPT_Param_Bool_url(const char* url)
     return false;
   }
   
-  
-  if (dp->type == DatapointType_int) {
+  if (dp->type == DatapointType_DPT_Param_Bool) {
     return true;
   }
   return false;
 }
 
-void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* in, int start, int n)
+void app_set_DPT_Param_Bool_default_value(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
+void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* in, int start, int n, bool store_persistently)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -671,10 +728,10 @@ void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* i
   }
   if (dp->g_var) {
     memcpy(&((DPT_Param_Bool*)dp->g_var)[start], in, sizeof(DPT_Param_Bool)*n);
-    if (dp->persistent) {
+    if (dp->persistent && store_persistently) {
       persistent_store_DPT_Param_Bool_array(get_datapoint_url(dp), (DPT_Param_Bool*)dp->g_var, max_elem);
     }
-  }else if (dp->persistent) {
+  }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
     DPT_Param_Bool *data = calloc(sizeof(DPT_Param_Bool), count);
@@ -685,17 +742,17 @@ void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* i
   return;
 }
 
-void app_set_DPT_Param_Bool_array(const char* url, const DPT_Param_Bool* in, int n)
+void app_set_DPT_Param_Bool_array(const char* url, const DPT_Param_Bool* in, int n, bool store_persistently)
 {
-  app_set_DPT_Param_Bool_array_elems(url, in, 0, n);
+  app_set_DPT_Param_Bool_array_elems(url, in, 0, n, store_persistently);
 }
 
 void app_set_DPT_Param_Bool_variable(const char* url, const DPT_Param_Bool* in)
 {
-  app_set_DPT_Param_Bool_array(url, in, 1);
+  app_set_DPT_Param_Bool_array(url, in, 1, true);
 }
 
-const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_array_elems(const char *url, DPT_Param_Bool* out, int start, int n)
+const DPT_Param_Bool* app_get_DPT_Param_Bool_array_elems(const char *url, DPT_Param_Bool* out, int start, int n)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -731,12 +788,12 @@ const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_array_elems(const char *ur
   return NULL;
 }
 
-const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_array(const char *url, DPT_Param_Bool* out, int n)
+const DPT_Param_Bool* app_get_DPT_Param_Bool_array(const char *url, DPT_Param_Bool* out, int n)
 {
   return app_get_DPT_Param_Bool_array_elems(url, out, 0, n);
 }
 
-const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_variable(const char *url, DPT_Param_Bool* out)
+const DPT_Param_Bool* app_get_DPT_Param_Bool_variable(const char *url, DPT_Param_Bool* out)
 {
   return app_get_DPT_Param_Bool_array(url, out, 1);
 }
@@ -744,10 +801,17 @@ const volatile DPT_Param_Bool* app_get_DPT_Param_Bool_variable(const char *url, 
 bool oc_parse_DPT_Param_Bool_single(oc_rep_t *rep, DPT_Param_Bool *out)
 {
   oc_array_t arr;
-  // this really shouldn't be void*
-  // we need to find a better way.
+// ('Enumeration', OrderedDict([('@Id', 'DPST-60012-3_F-1'), ('@Name', 'ValueBool'), ('@Width', '8'), ('EnumValue', [OrderedDict([('@Id', 'DPST-60012-3_F-1-1'), ('@Value', '0'), ('@Text', 'False')]), OrderedDict([('@Id', 'DPST-60012-3_F-1-2'), ('@Value', '1'), ('@Text', 'True')])])]))
   if (rep->type != OC_REP_INT) return false;
-  return oc_rep_i_get_int(rep, 1, (void*)out);
+  int64_t temp = 0;
+  int64_t *out_temp;
+  out_temp = &temp;
+  bool ret = oc_rep_i_get_int(rep, 1, out_temp);
+  DPT_Param_Bool temp2 = (DPT_Param_Bool)*out_temp;
+  *out = temp2;
+  
+  
+  return ret;
 }
 
 bool oc_parse_DPT_Param_Bool(oc_rep_t *rep, DPT_Param_Bool *out)
@@ -788,17 +852,21 @@ void oc_encode_DPT_Param_Bool_single(CborEncoder *parent, const DPT_Param_Bool *
     return;
   }
   oc_rep_i_set_key(parent, 1);
-  cbor_encode_int(parent, *in);
+  cbor_encode_int(parent, (int64_t)*in);
 }
 
-void oc_encode_DPT_Param_Bool(const DPT_Param_Bool *in)
+void oc_encode_DPT_Param_Bool(const DPT_Param_Bool *in, bool is_metadata)
 {
   if (in == NULL) {
     return;
   }
-  oc_rep_begin_root_object();
+  if (!is_metadata) { // Don't begin & end root object as it's already done during metadata handling
+    oc_rep_begin_root_object();
+  }
   oc_encode_DPT_Param_Bool_single(oc_rep_object(root), in);
-  oc_rep_end_root_object();
+  if (!is_metadata) {
+    oc_rep_end_root_object();
+  }
 }
 
 void oc_encode_DPT_Param_Bool_array(const DPT_Param_Bool *in, int n)
@@ -823,15 +891,21 @@ void persistent_store_DPT_Param_Bool(const char *name, const DPT_Param_Bool *in)
 void persistent_store_DPT_Param_Bool_array(const char *name, const DPT_Param_Bool *in, int n)
 {
   uint8_t *rep_buf;
+  long ret;
   const size_t max_size = 8 * n + 2;
   rep_buf = malloc(max_size);
-  char store_name[32] = STORE_PREFIX;
+#ifdef OPTIMIZE_STORAGE
+// use input as storage name with "/p/" prefix removed
+ const char* store_name = (char *)&name[3];
+#else
+    char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/');
   while(pos) {
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
 
   oc_rep_new(rep_buf, max_size);
   oc_encode_DPT_Param_Bool_array(in, n);
@@ -842,9 +916,13 @@ void persistent_store_DPT_Param_Bool_array(const char *name, const DPT_Param_Boo
       PRINT_APP("%02X ", rep_buf[i]);
     }
     PRINT_APP("\n");
-    oc_storage_write(store_name, rep_buf, size);
+    ret = oc_storage_write(store_name, rep_buf, size);
   }else{
     PRINT_APP("Error encoding DPT_Param_Bool %s for storage\n", name);
+  }
+
+  if (ret <= 0) {
+    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
   }
   free(rep_buf);
 }
@@ -859,6 +937,10 @@ bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out,
   oc_rep_t *rep = NULL;
   int max_size = 8 * n + 2;
   uint8_t *oc_storage_buf;
+#ifdef OPTIMIZE_STORAGE
+ // use input as storage name with "/p/" prefix removed
+  const char* store_name = (char *)&name[3];
+#else
   char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/'); 
@@ -866,10 +948,12 @@ bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out,
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
   long ret;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
   oc_storage_buf = malloc(max_size);
+  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
@@ -879,6 +963,7 @@ bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out,
   }
   PRINT_APP("\n");
   if (ret <= 0) {
+    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -894,8 +979,65 @@ err:
   if(error) {
     oc_storage_erase(name);
   }
+  oc_rep_set_pool(prev_rep_obj);
   return !error;
 }
+
+int app_sprintf_DPT_Param_Bool(const DPT_Param_Bool *in, char* text, int size)
+{
+  char item[50];
+  memset(text, 0, size);
+  if (in == NULL) {
+    return 1;
+  }
+  sprintf(item," %d ", *in);
+  strcat(text, item);
+
+  return 0;
+}
+
+int app_sscanf_DPT_Param_Bool(DPT_Param_Bool *in, char* text)
+{
+  char temp_string[300];
+  const char s[2] = " ";
+  char *token;
+  
+  if (text == NULL) {
+    return 1;
+  }
+  memset(temp_string, 0, 300);
+  strncpy(temp_string, text, 299);
+  int retval = 0;
+
+  // strtok is destructing the input string so copy it first
+  token = strtok(temp_string, s);
+  // Enumeration
+  retval = sscanf(token, " %d", in);
+  if (retval != 1) return 1;
+  token = strtok(NULL, s);
+
+  return 0;
+}
+
+int app_str_expected_DPT_Param_Bool(int select, char* text)
+{
+  if (text == NULL) {
+    return 1;
+  }
+  if (select == 1) {
+  // Enumeration
+    strcat(text, " %d");
+    return 0;
+  }
+  
+  if (select == 2) {
+    strcat(text, " 0");
+    return 0;
+  }
+  
+  return 1;
+}
+
 
 
 // Getters/Setters for DPT_Shot_Status
@@ -907,14 +1049,19 @@ bool app_is_DPT_Shot_Status_url(const char* url)
     return false;
   }
   
-  
   if (dp->type == DatapointType_DPT_Shot_Status) {
     return true;
   }
   return false;
 }
 
-void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status* in, int start, int n)
+void app_set_DPT_Shot_Status_default_value(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
+void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status* in, int start, int n, bool store_persistently)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -932,10 +1079,10 @@ void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status*
   }
   if (dp->g_var) {
     memcpy(&((DPT_Shot_Status*)dp->g_var)[start], in, sizeof(DPT_Shot_Status)*n);
-    if (dp->persistent) {
+    if (dp->persistent && store_persistently) {
       persistent_store_DPT_Shot_Status_array(get_datapoint_url(dp), (DPT_Shot_Status*)dp->g_var, max_elem);
     }
-  }else if (dp->persistent) {
+  }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
     DPT_Shot_Status *data = calloc(sizeof(DPT_Shot_Status), count);
@@ -946,17 +1093,17 @@ void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status*
   return;
 }
 
-void app_set_DPT_Shot_Status_array(const char* url, const DPT_Shot_Status* in, int n)
+void app_set_DPT_Shot_Status_array(const char* url, const DPT_Shot_Status* in, int n, bool store_persistently)
 {
-  app_set_DPT_Shot_Status_array_elems(url, in, 0, n);
+  app_set_DPT_Shot_Status_array_elems(url, in, 0, n, store_persistently);
 }
 
 void app_set_DPT_Shot_Status_variable(const char* url, const DPT_Shot_Status* in)
 {
-  app_set_DPT_Shot_Status_array(url, in, 1);
+  app_set_DPT_Shot_Status_array(url, in, 1, true);
 }
 
-const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_array_elems(const char *url, DPT_Shot_Status* out, int start, int n)
+const DPT_Shot_Status* app_get_DPT_Shot_Status_array_elems(const char *url, DPT_Shot_Status* out, int start, int n)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -992,12 +1139,12 @@ const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_array_elems(const char *
   return NULL;
 }
 
-const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_array(const char *url, DPT_Shot_Status* out, int n)
+const DPT_Shot_Status* app_get_DPT_Shot_Status_array(const char *url, DPT_Shot_Status* out, int n)
 {
   return app_get_DPT_Shot_Status_array_elems(url, out, 0, n);
 }
 
-const volatile DPT_Shot_Status* app_get_DPT_Shot_Status_variable(const char *url, DPT_Shot_Status* out)
+const DPT_Shot_Status* app_get_DPT_Shot_Status_variable(const char *url, DPT_Shot_Status* out)
 {
   return app_get_DPT_Shot_Status_array(url, out, 1);
 }
@@ -1014,11 +1161,12 @@ bool oc_parse_DPT_Shot_Status_single(oc_rep_t *rep, DPT_Shot_Status *out)
   arr = rep->value.array;
   if (oc_bool_array_size(arr) < 2)
     return false;
-  out->_DPST600041_F1 = oc_bool_array(arr)[0];
-  out->_DPST600041_F2 = oc_bool_array(arr)[1];
+  out->DPST_60004_1_F_1 = oc_bool_array(arr)[0];
+  out->DPST_60004_1_F_2 = oc_bool_array(arr)[1];
   rep = rep->next;
-  if (rep == NULL) return false;if (rep->type != OC_REP_INT) return false;
-  out->_DPST600041_F3 = rep->value.integer;
+  if (rep == NULL) return false;
+  if (rep->type != OC_REP_INT) return false;
+  out->DPST_60004_1_F_3 = rep->value.integer;
   return true;
 }
 
@@ -1062,21 +1210,25 @@ void oc_encode_DPT_Shot_Status_single(CborEncoder *parent, const DPT_Shot_Status
   oc_rep_i_set_key(parent, 1);
   oc_rep_begin_array(parent, arr);
   oc_rep_begin_array(oc_rep_array(arr), bool);
-  oc_rep_add_boolean(bool, in->_DPST600041_F1);
-  oc_rep_add_boolean(bool, in->_DPST600041_F2);
+  oc_rep_add_boolean(bool, in->DPST_60004_1_F_1);
+  oc_rep_add_boolean(bool, in->DPST_60004_1_F_2);
   oc_rep_end_array(oc_rep_array(arr), bool);
-  oc_rep_add_int(arr, in->_DPST600041_F3);
+  oc_rep_add_int(arr, in->DPST_60004_1_F_3);
   oc_rep_end_array(parent, arr);
 }
 
-void oc_encode_DPT_Shot_Status(const DPT_Shot_Status *in)
+void oc_encode_DPT_Shot_Status(const DPT_Shot_Status *in, bool is_metadata)
 {
   if (in == NULL) {
     return;
   }
-  oc_rep_begin_root_object();
+  if (!is_metadata) { // Don't begin & end root object as it's already done during metadata handling
+    oc_rep_begin_root_object();
+  }
   oc_encode_DPT_Shot_Status_single(oc_rep_object(root), in);
-  oc_rep_end_root_object();
+  if (!is_metadata) {
+    oc_rep_end_root_object();
+  }
 }
 
 void oc_encode_DPT_Shot_Status_array(const DPT_Shot_Status *in, int n)
@@ -1101,15 +1253,21 @@ void persistent_store_DPT_Shot_Status(const char *name, const DPT_Shot_Status *i
 void persistent_store_DPT_Shot_Status_array(const char *name, const DPT_Shot_Status *in, int n)
 {
   uint8_t *rep_buf;
+  long ret;
   const size_t max_size = 14 * n + 2;
   rep_buf = malloc(max_size);
-  char store_name[32] = STORE_PREFIX;
+#ifdef OPTIMIZE_STORAGE
+// use input as storage name with "/p/" prefix removed
+ const char* store_name = (char *)&name[3];
+#else
+    char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/');
   while(pos) {
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
 
   oc_rep_new(rep_buf, max_size);
   oc_encode_DPT_Shot_Status_array(in, n);
@@ -1120,9 +1278,13 @@ void persistent_store_DPT_Shot_Status_array(const char *name, const DPT_Shot_Sta
       PRINT_APP("%02X ", rep_buf[i]);
     }
     PRINT_APP("\n");
-    oc_storage_write(store_name, rep_buf, size);
+    ret = oc_storage_write(store_name, rep_buf, size);
   }else{
     PRINT_APP("Error encoding DPT_Shot_Status %s for storage\n", name);
+  }
+
+  if (ret <= 0) {
+    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
   }
   free(rep_buf);
 }
@@ -1137,6 +1299,10 @@ bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *ou
   oc_rep_t *rep = NULL;
   int max_size = 14 * n + 2;
   uint8_t *oc_storage_buf;
+#ifdef OPTIMIZE_STORAGE
+ // use input as storage name with "/p/" prefix removed
+  const char* store_name = (char *)&name[3];
+#else
   char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/'); 
@@ -1144,10 +1310,12 @@ bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *ou
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
   long ret;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
   oc_storage_buf = malloc(max_size);
+  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
@@ -1157,6 +1325,7 @@ bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *ou
   }
   PRINT_APP("\n");
   if (ret <= 0) {
+    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -1172,8 +1341,89 @@ err:
   if(error) {
     oc_storage_erase(name);
   }
+  oc_rep_set_pool(prev_rep_obj);
   return !error;
 }
+
+int app_sprintf_DPT_Shot_Status(const DPT_Shot_Status *in, char* text, int size)
+{
+  char item[50];
+  memset(text, 0, size);
+  if (in == NULL) {
+    return 1;
+  }
+  sprintf(item," %d ", in->DPST_60004_1_F_1);
+  strcat(text, item);
+  sprintf(item," %d ", in->DPST_60004_1_F_2);
+  strcat(text, item);
+  sprintf(item," %d ", in->DPST_60004_1_F_3);
+  strcat(text, item);
+
+  return 0;
+}
+
+int app_sscanf_DPT_Shot_Status(DPT_Shot_Status *in, char* text)
+{
+  char temp_string[300];
+  const char s[2] = " ";
+  char *token;
+  
+  if (text == NULL) {
+    return 1;
+  }
+  memset(temp_string, 0, 300);
+  strncpy(temp_string, text, 299);
+  int retval = 0;
+
+  // strtok is destructing the input string so copy it first
+  token = strtok(temp_string, s);
+  {
+    int var;
+    retval = sscanf(token, " %d", &var);
+    in->DPST_60004_1_F_1 = (bool)var;
+  }
+  if (retval != 1) return 1;
+  token = strtok(NULL, s);
+  {
+    int var;
+    retval = sscanf(token, " %d", &var);
+    in->DPST_60004_1_F_2 = (bool)var;
+  }
+  if (retval != 1) return 1;
+  token = strtok(NULL, s);
+  {
+    int var;
+    retval = sscanf(token, " %d", &var);
+    if (retval != 1) return 1;
+    in->DPST_60004_1_F_3 = var;
+  }
+  token = strtok(NULL, s);
+
+  return 0;
+}
+
+int app_str_expected_DPT_Shot_Status(int select, char* text)
+{
+  if (text == NULL) {
+    return 1;
+  }
+  if (select == 1) {
+    strcat(text, " %d");
+    strcat(text, " %d");
+    strcat(text, " %d");
+    return 0;
+  }
+  
+  if (select == 2) {
+    strcat(text, " 0");
+    strcat(text, " 0");
+    strcat(text, " 0");
+    return 0;
+  }
+  
+  return 1;
+}
+
 
 
 // Getters/Setters for DPT_Start
@@ -1185,14 +1435,19 @@ bool app_is_DPT_Start_url(const char* url)
     return false;
   }
   
-  
   if (dp->type == DatapointType_DPT_Start) {
     return true;
   }
   return false;
 }
 
-void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int start, int n)
+void app_set_DPT_Start_default_value(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
+void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int start, int n, bool store_persistently)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -1210,10 +1465,10 @@ void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int sta
   }
   if (dp->g_var) {
     memcpy(&((DPT_Start*)dp->g_var)[start], in, sizeof(DPT_Start)*n);
-    if (dp->persistent) {
+    if (dp->persistent && store_persistently) {
       persistent_store_DPT_Start_array(get_datapoint_url(dp), (DPT_Start*)dp->g_var, max_elem);
     }
-  }else if (dp->persistent) {
+  }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
     DPT_Start *data = calloc(sizeof(DPT_Start), count);
@@ -1224,17 +1479,17 @@ void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int sta
   return;
 }
 
-void app_set_DPT_Start_array(const char* url, const DPT_Start* in, int n)
+void app_set_DPT_Start_array(const char* url, const DPT_Start* in, int n, bool store_persistently)
 {
-  app_set_DPT_Start_array_elems(url, in, 0, n);
+  app_set_DPT_Start_array_elems(url, in, 0, n, store_persistently);
 }
 
 void app_set_DPT_Start_variable(const char* url, const DPT_Start* in)
 {
-  app_set_DPT_Start_array(url, in, 1);
+  app_set_DPT_Start_array(url, in, 1, true);
 }
 
-const volatile DPT_Start* app_get_DPT_Start_array_elems(const char *url, DPT_Start* out, int start, int n)
+const DPT_Start* app_get_DPT_Start_array_elems(const char *url, DPT_Start* out, int start, int n)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -1270,12 +1525,12 @@ const volatile DPT_Start* app_get_DPT_Start_array_elems(const char *url, DPT_Sta
   return NULL;
 }
 
-const volatile DPT_Start* app_get_DPT_Start_array(const char *url, DPT_Start* out, int n)
+const DPT_Start* app_get_DPT_Start_array(const char *url, DPT_Start* out, int n)
 {
   return app_get_DPT_Start_array_elems(url, out, 0, n);
 }
 
-const volatile DPT_Start* app_get_DPT_Start_variable(const char *url, DPT_Start* out)
+const DPT_Start* app_get_DPT_Start_variable(const char *url, DPT_Start* out)
 {
   return app_get_DPT_Start_array(url, out, 1);
 }
@@ -1283,10 +1538,13 @@ const volatile DPT_Start* app_get_DPT_Start_variable(const char *url, DPT_Start*
 bool oc_parse_DPT_Start_single(oc_rep_t *rep, DPT_Start *out)
 {
   oc_array_t arr;
-  // this really shouldn't be void*
-  // we need to find a better way.
+// ('bool', OrderedDict([('@Id', 'DPST-1-10_F-1'), ('@Cleared', 'Stop'), ('@Set', 'Start')]))
   if (rep->type != OC_REP_BOOL) return false;
-  return oc_rep_i_get_bool(rep, 1, (void*)out);
+  if (rep->type != OC_REP_BOOL) return false;
+  // todo Fix void
+   bool ret = oc_rep_i_get_bool(rep, 1, (void*)out);
+  
+  return ret;
 }
 
 bool oc_parse_DPT_Start(oc_rep_t *rep, DPT_Start *out)
@@ -1327,17 +1585,21 @@ void oc_encode_DPT_Start_single(CborEncoder *parent, const DPT_Start *in)
     return;
   }
   oc_rep_i_set_key(parent, 1);
-  cbor_encode_boolean(parent, *in);
+  cbor_encode_boolean(parent, (bool)*in);
 }
 
-void oc_encode_DPT_Start(const DPT_Start *in)
+void oc_encode_DPT_Start(const DPT_Start *in, bool is_metadata)
 {
   if (in == NULL) {
     return;
   }
-  oc_rep_begin_root_object();
+  if (!is_metadata) { // Don't begin & end root object as it's already done during metadata handling
+    oc_rep_begin_root_object();
+  }
   oc_encode_DPT_Start_single(oc_rep_object(root), in);
-  oc_rep_end_root_object();
+  if (!is_metadata) {
+    oc_rep_end_root_object();
+  }
 }
 
 void oc_encode_DPT_Start_array(const DPT_Start *in, int n)
@@ -1362,15 +1624,21 @@ void persistent_store_DPT_Start(const char *name, const DPT_Start *in)
 void persistent_store_DPT_Start_array(const char *name, const DPT_Start *in, int n)
 {
   uint8_t *rep_buf;
+  long ret;
   const size_t max_size = 4 * n + 2;
   rep_buf = malloc(max_size);
-  char store_name[32] = STORE_PREFIX;
+#ifdef OPTIMIZE_STORAGE
+// use input as storage name with "/p/" prefix removed
+ const char* store_name = (char *)&name[3];
+#else
+    char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/');
   while(pos) {
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
 
   oc_rep_new(rep_buf, max_size);
   oc_encode_DPT_Start_array(in, n);
@@ -1381,9 +1649,13 @@ void persistent_store_DPT_Start_array(const char *name, const DPT_Start *in, int
       PRINT_APP("%02X ", rep_buf[i]);
     }
     PRINT_APP("\n");
-    oc_storage_write(store_name, rep_buf, size);
+    ret = oc_storage_write(store_name, rep_buf, size);
   }else{
     PRINT_APP("Error encoding DPT_Start %s for storage\n", name);
+  }
+
+  if (ret <= 0) {
+    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
   }
   free(rep_buf);
 }
@@ -1398,6 +1670,10 @@ bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n)
   oc_rep_t *rep = NULL;
   int max_size = 4 * n + 2;
   uint8_t *oc_storage_buf;
+#ifdef OPTIMIZE_STORAGE
+ // use input as storage name with "/p/" prefix removed
+  const char* store_name = (char *)&name[3];
+#else
   char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/'); 
@@ -1405,10 +1681,12 @@ bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n)
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
   long ret;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
   oc_storage_buf = malloc(max_size);
+  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
@@ -1418,6 +1696,7 @@ bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n)
   }
   PRINT_APP("\n");
   if (ret <= 0) {
+    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -1433,8 +1712,68 @@ err:
   if(error) {
     oc_storage_erase(name);
   }
+  oc_rep_set_pool(prev_rep_obj);
   return !error;
 }
+
+int app_sprintf_DPT_Start(const DPT_Start *in, char* text, int size)
+{
+  char item[50];
+  memset(text, 0, size);
+  if (in == NULL) {
+    return 1;
+  }
+  sprintf(item," %d ", *in);
+  strcat(text, item);
+
+  return 0;
+}
+
+int app_sscanf_DPT_Start(DPT_Start *in, char* text)
+{
+  char temp_string[300];
+  const char s[2] = " ";
+  char *token;
+  
+  if (text == NULL) {
+    return 1;
+  }
+  memset(temp_string, 0, 300);
+  strncpy(temp_string, text, 299);
+  int retval = 0;
+
+  // strtok is destructing the input string so copy it first
+  token = strtok(temp_string, s);
+  // bool
+  {
+    int var;
+    retval = sscanf(token, " %d", &var);
+    if (retval != 1) return 1;
+    *in = (bool)var;
+  }
+
+  return 0;
+}
+
+int app_str_expected_DPT_Start(int select, char* text)
+{
+  if (text == NULL) {
+    return 1;
+  }
+  if (select == 1) {
+  // bool
+    strcat(text, " %d");
+    return 0;
+  }
+  
+  if (select == 2) {
+    strcat(text, " 0");
+    return 0;
+  }
+  
+  return 1;
+}
+
 
 
 // Getters/Setters for DPT_Uint_XY
@@ -1446,14 +1785,19 @@ bool app_is_DPT_Uint_XY_url(const char* url)
     return false;
   }
   
-  
   if (dp->type == DatapointType_DPT_Uint_XY) {
     return true;
   }
   return false;
 }
 
-void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int start, int n)
+void app_set_DPT_Uint_XY_default_value(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
+void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int start, int n, bool store_persistently)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -1471,10 +1815,10 @@ void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int
   }
   if (dp->g_var) {
     memcpy(&((DPT_Uint_XY*)dp->g_var)[start], in, sizeof(DPT_Uint_XY)*n);
-    if (dp->persistent) {
+    if (dp->persistent && store_persistently) {
       persistent_store_DPT_Uint_XY_array(get_datapoint_url(dp), (DPT_Uint_XY*)dp->g_var, max_elem);
     }
-  }else if (dp->persistent) {
+  }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
     DPT_Uint_XY *data = calloc(sizeof(DPT_Uint_XY), count);
@@ -1485,17 +1829,17 @@ void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int
   return;
 }
 
-void app_set_DPT_Uint_XY_array(const char* url, const DPT_Uint_XY* in, int n)
+void app_set_DPT_Uint_XY_array(const char* url, const DPT_Uint_XY* in, int n, bool store_persistently)
 {
-  app_set_DPT_Uint_XY_array_elems(url, in, 0, n);
+  app_set_DPT_Uint_XY_array_elems(url, in, 0, n, store_persistently);
 }
 
 void app_set_DPT_Uint_XY_variable(const char* url, const DPT_Uint_XY* in)
 {
-  app_set_DPT_Uint_XY_array(url, in, 1);
+  app_set_DPT_Uint_XY_array(url, in, 1, true);
 }
 
-const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_array_elems(const char *url, DPT_Uint_XY* out, int start, int n)
+const DPT_Uint_XY* app_get_DPT_Uint_XY_array_elems(const char *url, DPT_Uint_XY* out, int start, int n)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
   if (dp == NULL) {
@@ -1531,12 +1875,12 @@ const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_array_elems(const char *url, DPT
   return NULL;
 }
 
-const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_array(const char *url, DPT_Uint_XY* out, int n)
+const DPT_Uint_XY* app_get_DPT_Uint_XY_array(const char *url, DPT_Uint_XY* out, int n)
 {
   return app_get_DPT_Uint_XY_array_elems(url, out, 0, n);
 }
 
-const volatile DPT_Uint_XY* app_get_DPT_Uint_XY_variable(const char *url, DPT_Uint_XY* out)
+const DPT_Uint_XY* app_get_DPT_Uint_XY_variable(const char *url, DPT_Uint_XY* out)
 {
   return app_get_DPT_Uint_XY_array(url, out, 1);
 }
@@ -1548,8 +1892,9 @@ bool oc_parse_DPT_Uint_XY_single(oc_rep_t *rep, DPT_Uint_XY *out)
   arr = rep->value.array;
   if (oc_int_array_size(arr) < 2)
     return false;
-  out->_DPST600091_F1 = oc_int_array(arr)[0];
-  out->_DPST600091_F2 = oc_int_array(arr)[1]; 
+  out->DPST_60009_1_F_1 = oc_int_array(arr)[0];
+  out->DPST_60009_1_F_2 = oc_int_array(arr)[1]; 
+  return true;
 }
 
 bool oc_parse_DPT_Uint_XY(oc_rep_t *rep, DPT_Uint_XY *out)
@@ -1591,19 +1936,23 @@ void oc_encode_DPT_Uint_XY_single(CborEncoder *parent, const DPT_Uint_XY *in)
   }
   oc_rep_i_set_key(parent, 1);
   oc_rep_begin_array(parent, arr);
-  oc_rep_add_int(arr, in->_DPST600091_F1);
-  oc_rep_add_int(arr, in->_DPST600091_F2);
+  oc_rep_add_int(arr, in->DPST_60009_1_F_1);
+  oc_rep_add_int(arr, in->DPST_60009_1_F_2);
   oc_rep_end_array(parent, arr);
 }
 
-void oc_encode_DPT_Uint_XY(const DPT_Uint_XY *in)
+void oc_encode_DPT_Uint_XY(const DPT_Uint_XY *in, bool is_metadata)
 {
   if (in == NULL) {
     return;
   }
-  oc_rep_begin_root_object();
+  if (!is_metadata) { // Don't begin & end root object as it's already done during metadata handling
+    oc_rep_begin_root_object();
+  }
   oc_encode_DPT_Uint_XY_single(oc_rep_object(root), in);
-  oc_rep_end_root_object();
+  if (!is_metadata) {
+    oc_rep_end_root_object();
+  }
 }
 
 void oc_encode_DPT_Uint_XY_array(const DPT_Uint_XY *in, int n)
@@ -1628,15 +1977,21 @@ void persistent_store_DPT_Uint_XY(const char *name, const DPT_Uint_XY *in)
 void persistent_store_DPT_Uint_XY_array(const char *name, const DPT_Uint_XY *in, int n)
 {
   uint8_t *rep_buf;
+  long ret;
   const size_t max_size = 15 * n + 2;
   rep_buf = malloc(max_size);
-  char store_name[32] = STORE_PREFIX;
+#ifdef OPTIMIZE_STORAGE
+// use input as storage name with "/p/" prefix removed
+ const char* store_name = (char *)&name[3];
+#else
+    char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/');
   while(pos) {
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
 
   oc_rep_new(rep_buf, max_size);
   oc_encode_DPT_Uint_XY_array(in, n);
@@ -1647,9 +2002,13 @@ void persistent_store_DPT_Uint_XY_array(const char *name, const DPT_Uint_XY *in,
       PRINT_APP("%02X ", rep_buf[i]);
     }
     PRINT_APP("\n");
-    oc_storage_write(store_name, rep_buf, size);
+    ret = oc_storage_write(store_name, rep_buf, size);
   }else{
     PRINT_APP("Error encoding DPT_Uint_XY %s for storage\n", name);
+  }
+
+  if (ret <= 0) {
+    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
   }
   free(rep_buf);
 }
@@ -1664,6 +2023,10 @@ bool persistent_load_DPT_Uint_XY_array(const char *name, DPT_Uint_XY *out, int n
   oc_rep_t *rep = NULL;
   int max_size = 15 * n + 2;
   uint8_t *oc_storage_buf;
+#ifdef OPTIMIZE_STORAGE
+ // use input as storage name with "/p/" prefix removed
+  const char* store_name = (char *)&name[3];
+#else
   char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/'); 
@@ -1671,10 +2034,12 @@ bool persistent_load_DPT_Uint_XY_array(const char *name, DPT_Uint_XY *out, int n
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
   long ret;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
   oc_storage_buf = malloc(max_size);
+  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
@@ -1684,6 +2049,7 @@ bool persistent_load_DPT_Uint_XY_array(const char *name, DPT_Uint_XY *out, int n
   }
   PRINT_APP("\n");
   if (ret <= 0) {
+    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -1699,8 +2065,78 @@ err:
   if(error) {
     oc_storage_erase(name);
   }
+  oc_rep_set_pool(prev_rep_obj);
   return !error;
 }
+
+int app_sprintf_DPT_Uint_XY(const DPT_Uint_XY *in, char* text, int size)
+{
+  char item[50];
+  memset(text, 0, size);
+  if (in == NULL) {
+    return 1;
+  }
+  sprintf(item," %u ", in->DPST_60009_1_F_1);
+  strcat(text, item);
+  sprintf(item," %u ", in->DPST_60009_1_F_2);
+  strcat(text, item);
+
+  return 0;
+}
+
+int app_sscanf_DPT_Uint_XY(DPT_Uint_XY *in, char* text)
+{
+  char temp_string[300];
+  const char s[2] = " ";
+  char *token;
+  
+  if (text == NULL) {
+    return 1;
+  }
+  memset(temp_string, 0, 300);
+  strncpy(temp_string, text, 299);
+  int retval = 0;
+
+  // strtok is destructing the input string so copy it first
+  token = strtok(temp_string, s);
+  {
+    unsigned int var;
+    retval = sscanf(token, " %u", &var);
+    if (retval != 1) return 1;
+    in->DPST_60009_1_F_1 = var;
+  }
+  token = strtok(NULL, s);
+  {
+    unsigned int var;
+    retval = sscanf(token, " %u", &var);
+    if (retval != 1) return 1;
+    in->DPST_60009_1_F_2 = var;
+  }
+  token = strtok(NULL, s);
+
+  return 0;
+}
+
+int app_str_expected_DPT_Uint_XY(int select, char* text)
+{
+  if (text == NULL) {
+    return 1;
+  }
+  if (select == 1) {
+    strcat(text, " %u");
+    strcat(text, " %u");
+    return 0;
+  }
+  
+  if (select == 2) {
+    strcat(text, " 0");
+    strcat(text, " 0");
+    return 0;
+  }
+  
+  return 1;
+}
+
 // BOOLEAN code
 
 /**
@@ -1761,6 +2197,31 @@ bool app_retrieve_bool_variable(const char* url)
   return false;
 }
 
+
+/**
+ * @brief retrieve the global int variable at the url
+ *
+ * @param url the url indicating the global variable
+ * @param value ptr to value (which is going to be set)
+ * @return the true if variable is set
+ */
+bool app_retrieve_int_variable(const char* url, int* value)
+{
+  const datapoint_t *dp = get_datapoint_by_url(url);
+  if (dp == NULL) {
+    return false;
+  }
+  if (dp->type != DatapointType_int) {
+    return false;
+  }
+  if (dp->g_var) {
+    value = ((int*)dp->g_var);
+    return true;
+  }
+  return false;
+}
+
+
 // FAULT code
 
 /**
@@ -1775,7 +2236,7 @@ void app_set_fault_variable(const char* url, bool value)
   if (dp == NULL) {
     return;
   }
-  if (dp->resource.interfaces & OC_IF_A == 0) {
+  if ((dp->resource.interfaces & OC_IF_A) == 0) {
     return;
   }
   if (dp->g_fault) {
@@ -1809,6 +2270,11 @@ bool app_retrieve_fault_variable(const char* url)
 
 bool app_is_url_parameter(const char* url)
 {
+  // all parametes start with /p/pxxx
+  if (strncmp(url,"/p/p",4) == 0 ) {
+    return false;
+  }
+
   for (int i = 0; i < num_parameters; i++) {
     const datapoint_t *dp = &g_parameters[i];
     if (strcmp(get_datapoint_url(dp), url) == 0) {
@@ -1894,6 +2360,7 @@ int app_initialize_stack();
 void signal_event_loop(void);
 void register_resources(void);
 void initialize_variables();
+void reset_variables();
 void logic_initialize();
 int app_init(void);
 #ifdef __cplusplus
@@ -1949,11 +2416,11 @@ oc_add_s_mode_response_cb(char *url, oc_rep_t *rep, oc_rep_t *rep_value)
  *
  */
 void app_str_to_upper(char *str){
-    while (*str != '\0')
-    {
-        *str = toupper(*str);
-        str++;
-    }
+  while (*str != '\0')
+  {
+    *str = toupper(*str);
+    str++;
+  }
 }
 
 /**
@@ -1966,7 +2433,7 @@ void app_str_to_upper(char *str){
  * - knx spec version
  * - hardware version : [0, 4, 0]
  * - firmware version : [0, 4, 0]
- * - hardware type    : Windows
+ * - hardware type    : 000000000000
  * - device model     : KNX Battleships Demo eink
  *
  */
@@ -1981,6 +2448,25 @@ app_init(void)
 
   oc_device_info_t *device = oc_core_get_device_info(0);
 
+#ifdef LINUX
+  #define MAX_HOSTNAME 50
+  char hostname[50];
+  // set the hostname
+  ret = gethostname(&hostname[0], 50);
+  if (ret != -1) {
+    printf("Hostname (linux):    %s\n", hostname);
+    oc_core_set_device_hostname(0, hostname);
+  }
+#endif
+#ifdef WIN32
+  char hostname_str[50];
+  int error = gethostname(hostname_str, 50);
+  if (error == 0) {
+    printf("Hostname (win32):    %s\n", hostname_str);
+    oc_core_set_device_hostname(0, hostname_str);
+  }
+#endif
+
   
   /* set the hardware version 0.4.0 */
   oc_core_set_device_hwv(0, 0, 4, 0);
@@ -1989,10 +2475,11 @@ app_init(void)
   /* set the firmware version 0.4.0 */
   oc_core_set_device_fwv(0, 0, 4, 0);
   
-
+  
+  /* manufacturer id */
+  oc_core_set_device_mid(0, 0x00FA);
   /* set the hardware type*/
-  oc_core_set_device_hwt(0, "00696e646f77");
-
+  oc_core_set_device_hwt(0, "000000000000");
   /* set the model */
   oc_core_set_device_model(0, "KNX Battleships Demo eink");
 
@@ -2014,24 +2501,10 @@ app_init(void)
   app_initialize();
   #endif 
   if (oc_is_device_in_runtime(0) == false) {
-    static struct qr_code_t knx_qr;
-    static char knx_qr_buf[32+10+12+1];
-    char serial_number_uppercase[20];
-    strncpy(serial_number_uppercase, oc_string(device->serialnumber), 19);
-    app_str_to_upper(serial_number_uppercase);
-    // KNX QR code, example: note: SN should be upper case
-    // KNX:S:00FA10010400;P:ABY8B77J50YXMUDW3DG4 
-    char* sn = oc_string(device->serialnumber);
-    char* pw = app_get_password();
-    snprintf(knx_qr_buf, sizeof(knx_qr_buf)-1, "KNX:S:%s;P:%s",serial_number_uppercase, pw);
-    
-    knx_qr.str_data = knx_qr_buf;
-    knx_qr.desc = "KNX QR code";
 #ifdef NO_MAIN
     // only for embedded systems
-    register_qr_code(&knx_qr);
-    PRINT_APP("Registered KNX QR code");
-#endif
+    refresh_screen(true);
+#endif /* NO_MAIN */
   } 
 
   return ret;
@@ -2055,8 +2528,9 @@ bool request_query_get_int(oc_request_t *request, const char *query, int *out)
   char *query_str;
   
   int query_len = oc_get_query_value(request, query, &query_str);
-  if(query_len <= 0)
+  if(query_len <= 0) {
     return false;
+  }
   char buf[16];
   strncpy(buf, query_str, query_len);
   *out = atoi(buf);
@@ -2070,13 +2544,18 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
   const datapoint_t *dp = user_data; 
 
   bool error_state = false; /* the error state, the generated code */
-  PRINT("-- Begin get_generic  (%s) \n", get_datapoint_name(dp));
 
   if (dp == NULL) {
-    PRINT("Error dp is NULL\n");
-    oc_send_response(request, OC_STATUS_INTERNAL_SERVER_ERROR);
-    return;
+    dp = get_datapoint_by_url(request->uri_path);
+    if (dp == NULL) {
+      PRINT("Error dp is NULL\n");
+      oc_send_response_no_format(request, OC_STATUS_INTERNAL_SERVER_ERROR);
+      return;
+    }
   }
+
+  PRINT("-- Begin get_generic  (%s) \n", get_datapoint_name(dp));
+
   /* MANUFACTORER: SENSOR add here the code to talk to the HW if one implements a
      sensor. the call to the HW needs to fill in the global variable before it
      returns to this function here. alternative is to have a callback from the
@@ -2085,7 +2564,7 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
 
   /* check if the accept header is CBOR */
   if (oc_check_accept_header(request, APPLICATION_CBOR) == false) {
-    oc_send_response(request, OC_STATUS_BAD_OPTION);
+    oc_send_response_no_format(request, OC_STATUS_BAD_OPTION);
     return;
   }
 
@@ -2098,31 +2577,51 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
   if(!request_query_get_int(request, "pn", &pn) || dp->num_elements == 0) pn = 0;
   if(!request_query_get_int(request, "ps", &ps) || dp->num_elements == 0) ps = 1;
   if (m_len != -1) {
-    PRINT("  Query param: %.*s",(int)m_len, m);
+    PRINT("  Query param: %.*s\n",(int)m_len, m);
     oc_init_query_iterator();
     size_t device_index = request->resource->device;
     oc_device_info_t *device = oc_core_get_device_info(device_index);
     if (device != NULL) {
+      bool m_valid = false;
       oc_rep_begin_root_object();
       while (oc_iterate_query(request, &m_key, &m_key_len, &m, &m_len) != -1) {
+        // value
+        if ((strncmp(m, "value", m_len) == 0) |
+            (strncmp(m, "*", m_len) == 0) ) {
+          m_valid = true;
+          if (oc_encode_datapoint(dp, pn, ps, true) == false) {
+            oc_send_response_no_format(request, OC_STATUS_INTERNAL_SERVER_ERROR);
+            goto done;
+          }
+        }
         // unique identifier
         if ((strncmp(m, "id", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
+          m_valid = true;
           char mystring[100];
-          snprintf(mystring,99,"urn:knx:sn:%s%s",oc_string(device->serialnumber),
-           oc_string(request->resource->uri));
-          oc_rep_i_set_text_string(root, 9, mystring);
+          snprintf(mystring,99,"knx://sn.%s%s",oc_string(device->serialnumber),
+            oc_string(request->resource->uri));
+          oc_rep_i_set_text_string(root, 0, mystring);
+        }
+        // href, i.e. url
+        if ((strncmp(m, "href", m_len) == 0) |
+            (strncmp(m, "*", m_len) == 0) ) {
+          // Valid and mandatory metadata, but "can be omitted in response"
+          m_valid = true;
+          oc_rep_set_text_string(root, href, get_datapoint_url(dp));
         }
         // resource types
         if ((strncmp(m, "rt", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
+          m_valid = true;
           const char *dpa = get_datapoint_dpa(dp);
           if (dpa)
-            oc_rep_set_text_string(root, rt, dpa);
+            oc_rep_set_text_string(root, rt, &dpa[7]);
         }
         // interfaces
         if ((strncmp(m, "if", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
+          m_valid = true;
           oc_rep_set_key(oc_rep_object(root), "if");
           oc_rep_begin_array(oc_rep_object(root), if);
           for (int i = 1; i <= (1<<OC_MAX_IF_MASKS); i <<=1)
@@ -2132,37 +2631,46 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
         }
         if ((strncmp(m, "dpt", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
-          oc_rep_set_text_string(root, dpt, oc_string(request->resource->dpt));
+          m_valid = true;
+          char *full_dpt = oc_string(request->resource->dpt);
+          oc_rep_set_text_string(root, dpt, &full_dpt[7]);
         }
         // ga
         if ((strncmp(m, "ga", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
+          m_valid = true;
           int index = oc_core_find_group_object_table_url(oc_string(request->resource->uri));
           if (index > -1) {
-             oc_group_object_table_t* got_table_entry = oc_core_get_group_object_table_entry(index);
-             if (got_table_entry) {
+            oc_group_object_table_t* got_table_entry = oc_core_get_group_object_table_entry(index);
+            if (got_table_entry) {
                oc_rep_set_int_array(root, ga, got_table_entry->ga, got_table_entry->ga_len);
-             }
+            }
           }
         }
         for (const char *const *md = get_datapoint_metadata(dp); md && *md; md+=2) {
           if((strncmp(m, md[0], m_len) == 0) |
               (strncmp(m, "*", m_len) == 0) ) {
+                m_valid = true;
                 oc_rep_set_text_string_no_tag(root, md[0]);
                 oc_rep_set_text_string_no_tag(root, md[1]);
               }
         }
       } /* query iterator */
       oc_rep_end_root_object();
+      if (m_valid == false) {
+        oc_send_response_no_format(request, OC_STATUS_BAD_REQUEST);
+        goto done;
+      }
     } else {
       /* device is NULL */
-      oc_send_cbor_response(request, OC_STATUS_BAD_OPTION);
+      oc_send_response_no_format(request, OC_STATUS_BAD_OPTION);
+      goto done;
     }
     oc_send_cbor_response(request, OC_STATUS_OK);
-    return;
+    goto done;
   }
-  if (oc_encode_datapoint(dp, pn, ps) == false) {
-    oc_send_response(request, OC_STATUS_INTERNAL_SERVER_ERROR);
+  if (oc_encode_datapoint(dp, pn, ps, false) == false) {
+    oc_send_response_no_format(request, OC_STATUS_INTERNAL_SERVER_ERROR);
     goto done;
   }
   if (g_err) {
@@ -2172,7 +2680,7 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
   if (error_state == false) {
     oc_send_cbor_response(request, OC_STATUS_OK);
   } else {
-    oc_send_response(request, OC_STATUS_BAD_OPTION);
+    oc_send_response_no_format(request, OC_STATUS_BAD_OPTION);
   }
 done:
   PRINT("-- End get_generic (%s)\n", get_datapoint_url(dp));
@@ -2186,14 +2694,17 @@ put_generic(oc_request_t *request, oc_interface_mask_t interfaces,
   (void)interfaces;
   const datapoint_t *dp = user_data;
   bool error_state = true;
-  
-  PRINT("-- Begin put_generic (%s):\n", get_datapoint_url(dp));
 
   if (dp == NULL) {
-    PRINT("Error dp is NULL\n");
-    oc_send_response(request, OC_STATUS_INTERNAL_SERVER_ERROR);
-    return;
+    dp = get_datapoint_by_url(request->uri_path);
+    if (dp == NULL) {
+      PRINT("Error dp is NULL\n");
+      oc_send_response_no_format(request, OC_STATUS_INTERNAL_SERVER_ERROR);
+      return;
+    }
   }
+
+  PRINT("-- Begin put_generic (%s):\n", get_datapoint_url(dp));
 
   oc_rep_t *rep = NULL;
   int pn, ps;
@@ -2210,22 +2721,27 @@ put_generic(oc_request_t *request, oc_interface_mask_t interfaces,
   error_state = !oc_parse_datapoint(dp, rep, new_value, ps);
 
   if (error_state == false){
-      oc_send_cbor_response(request, OC_STATUS_CHANGED);
-      datapoint_set(dp, new_value, pn*ps, ps);
-      if (dp->feedback_url) {
-        //check types match
-        const datapoint_t *feedback = get_datapoint_by_url(dp->feedback_url);
-        if (feedback->type == dp->type && feedback->num_elements == dp->num_elements) {
-          datapoint_set(feedback, new_value, pn*ps, ps);
-          PRINT("  Send status to '%s' with flag: 'w'\n", get_datapoint_url(feedback));
-          oc_do_s_mode_with_scope(5, dp->feedback_url, "w");
-        }
-      }
+    const oc_resource_t *my_resource =
+    oc_ri_get_app_resource_by_uri(request->uri_path, strlen(request->uri_path), 0);
+    if (my_resource != NULL)
+      oc_notify_observers(my_resource);
 
-      do_put_cb(get_datapoint_url(dp));
+    oc_send_response_no_format(request, OC_STATUS_CHANGED);
+    datapoint_set(dp, new_value, pn*ps, ps);
+    if (dp->feedback_url) {
+      //check types match
+      const datapoint_t *feedback = get_datapoint_by_url(dp->feedback_url);
+      if (feedback->type == dp->type && feedback->num_elements == dp->num_elements) {
+        datapoint_set(feedback, new_value, pn*ps, ps);
+        PRINT("  Send status to '%s' with flag: 'w'\n", get_datapoint_url(feedback));
+        oc_do_s_mode_with_scope(5, dp->feedback_url, "w");
+      }
+    }
+
+    do_put_cb(get_datapoint_url(dp));
   } else {
     /* request data was not recognized, so it was a bad request */
-    oc_send_response(request, OC_STATUS_BAD_REQUEST);
+    oc_send_response_no_format(request, OC_STATUS_BAD_REQUEST);
   }
   free(new_value);
   PRINT("-- End put_generic (%s)\n", get_datapoint_url(dp));
@@ -2260,6 +2776,36 @@ register_resources(void)
   oc_ri_add_resource_block(&g_datapoints[0].resource); 
 }
 
+#ifdef MQTT_PROXY
+void
+configure_mqtt_from_parameters() {
+  strncpy(g_mqttconf_server, gMQTT_hostname0, sizeof(g_mqttconf_server));
+  g_mqttconf_port = gMQTT_port_number0;
+  strncpy(g_mqttconf_username, gMQTT_username0, sizeof(g_mqttconf_username));
+  strncpy(g_mqttconf_pwd, gMQTT_password0, sizeof(g_mqttconf_pwd));
+  strncpy(g_iid_name, gIID_name0, sizeof(g_iid_name));
+  PRINT("MQTT configuration:\n");
+  PRINT(" hostname: %s\n", g_mqttconf_server);
+  PRINT(" port    : %d\n", g_mqttconf_port);
+  PRINT(" username: %s\n", g_mqttconf_username);
+  PRINT(" password: %s\n", g_mqttconf_pwd);
+  PRINT(" IID name: %s\n", g_iid_name);
+}
+#endif
+
+/**
+ * @brief callback when a/lsm state changes
+ * @param device_index the device identifier of the list of devices
+ * @param current_state current state (i.e. after the change)
+ * @param data the supplied data.
+ */
+void
+lsm_change_cb(size_t device_index, oc_lsm_state_t current_state, void *data)
+{
+  (void)device_index;
+  (void)data;
+}
+
 /**
  * @brief initiate preset for device
  * current implementation: device reset as command line argument
@@ -2271,11 +2817,7 @@ factory_presets_cb(size_t device_index, void *data)
 {
   (void)device_index;
   (void)data;
-
-  if (g_reset) {
-    PRINT("factory_presets_cb: resetting device\n");
-    oc_knx_device_storage_reset(device_index, 2);
-  }
+  reset_variables();
 }
 
 /**
@@ -2361,41 +2903,94 @@ initialize_variables(void)
   long ret;
   bool err;
 
-  PRINT_APP("Initializing persitent data\n");
-for(int i = 0; i < num_datapoints; i++) {
+  PRINT_APP("Initializing persistent data\n");
+
+  for(int i = 0; i < num_datapoints; i++) {
     const datapoint_t *it = &g_datapoints[i];
-    if (!it->persistent) continue;
+    if (!it->persistent && !it->default_present) continue;
     if (it->g_var == NULL) continue;
     if (it->num_elements){
-      if (g_datapoint_types[it->type].persistent_load_array == NULL){
-        PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
-      } else {
-        g_datapoint_types[it->type].persistent_load_array(get_datapoint_url(it), (void*)it->g_var, it->num_elements);
+      if (it->default_present){
+        g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
+      }
+      if (it->persistent) {
+        if (g_datapoint_types[it->type].persistent_load_array == NULL){
+          PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
+        } else {
+          g_datapoint_types[it->type].persistent_load_array(get_datapoint_url(it), (void*)it->g_var, it->num_elements);
+        }
       }
     } else {
-      if (g_datapoint_types[it->type].persistent_load == NULL){
-        PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
-      } else {
-        g_datapoint_types[it->type].persistent_load(get_datapoint_url(it), (void*)it->g_var);
+      if (it->default_present){
+        g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
+      }
+      if (it->persistent) {
+        if (g_datapoint_types[it->type].persistent_load == NULL){
+          PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
+        } else {
+          g_datapoint_types[it->type].persistent_load(get_datapoint_url(it), (void*)it->g_var);
+        }
       }
     }
   } 
-for(int i = 0; i < num_parameters; i++) {
+
+  for(int i = 0; i < num_parameters; i++) {
     const datapoint_t *it = &g_parameters[i];
-    if (!it->persistent) continue;
+    if (!it->persistent && !it->default_present) continue;
     if (it->g_var == NULL) continue;
     if (it->num_elements){
-    if (g_datapoint_types[it->type].persistent_load_array == NULL){
-        PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
-      } else {
-        g_datapoint_types[it->type].persistent_load_array(get_datapoint_url(it), (void*)it->g_var, it->num_elements);
+      if (it->default_present){
+        g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
+      }
+      if (it->persistent) {
+        if (g_datapoint_types[it->type].persistent_load_array == NULL){
+          PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
+        } else {
+          g_datapoint_types[it->type].persistent_load_array(get_datapoint_url(it), (void*)it->g_var, it->num_elements);
+        }
       }
     } else {
-      if (g_datapoint_types[it->type].persistent_load == NULL){
-        PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
-      } else {
-        g_datapoint_types[it->type].persistent_load(get_datapoint_url(it), (void*)it->g_var);
+      if (it->default_present){
+        g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
       }
+      if (it->persistent) {
+        if (g_datapoint_types[it->type].persistent_load == NULL){
+          PRINT_APP("ERR: persistent load array missing for %d\n", it->type);
+        } else {
+          g_datapoint_types[it->type].persistent_load(get_datapoint_url(it), (void*)it->g_var);
+        }
+      }
+    }
+  } 
+}
+/**
+ * @brief reset variables to default value
+ * for the resources
+ * for the parameters
+ */
+void
+reset_variables(void)
+{
+  /* reset variables to default value */
+  PRINT_APP("Resetting to default value\n");
+
+  for(int i = 0; i < num_datapoints; i++) {
+    const datapoint_t *it = &g_datapoints[i];
+    if (it->persistent) {
+      oc_storage_erase(get_datapoint_url(it));
+    }
+    if (it->default_present){
+      g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
+    }
+  } 
+
+  for(int i = 0; i < num_parameters; i++) {
+    const datapoint_t *it = &g_parameters[i];
+    if (it->persistent) {
+      oc_storage_erase(get_datapoint_url(it));
+    }
+    if (it->default_present){
+      g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
     }
   } 
 }
@@ -2434,7 +3029,7 @@ int app_initialize_stack()
 #else
   PRINT("\tstorage at 'knx_eink_battleships_creds' \n");
   oc_storage_config("./knx_eink_battleships_creds");
-#endif
+#endif /* WIN32 */
 
 
   /* initializes the handlers structure */
@@ -2446,10 +3041,11 @@ int app_initialize_stack()
   /* set the application callbacks */
   oc_set_hostname_cb(hostname_cb, NULL);
   oc_set_factory_presets_cb(factory_presets_cb, NULL);
+	oc_set_lsm_change_cb(lsm_change_cb, NULL);
 
 #if defined WIN32 || defined __linux__
   oc_set_swu_cb(swu_cb, (void *)fname);
-#endif
+#endif /* WIN32 || defined __linux__ */
 
   /* start the stack */
   init = oc_main_init(&handler);
@@ -2458,6 +3054,13 @@ int app_initialize_stack()
     PRINT("oc_main_init failed %d, exiting.\n", init);
     return init;
   }
+
+  if (g_reset) {
+    PRINT("factory_presets_cb: resetting device\n");
+    oc_knx_device_storage_reset(0, 2);
+  }
+
+  oc_knx_knx_ignore_smessage_from_self(true);
 
 #ifdef OC_OSCORE
   PRINT("OSCORE - Enabled\n");
@@ -2536,8 +3139,16 @@ print_usage()
   PRINT("-help  : this message\n");
   PRINT("reset  : does an full reset of the device\n");
   PRINT("-s <serial number> : sets the serial number of the device\n");
+#ifdef MQTT_PROXY
+  PRINT("MQTT proxy configurations (only used before ETS download):\n");
+  PRINT("-host : sets the MQTT broker hostname\n");
+  PRINT("-port : sets the MQTT broker port number\n");
+  PRINT("-username : sets the MQTT username\n");
+  PRINT("-pwd : sets the MQTT password\n");
+#endif
   exit(0);
 }
+
 /**
  * @brief main application.
  * initializes the global variables
@@ -2551,9 +3162,15 @@ main(int argc, char *argv[])
   oc_clock_time_t next_event;
   bool do_send_s_mode = false;
 
+
+#ifdef HARDWARE_INIT
+  hardware_init();
+#endif /* hardware init */
+
+
 #ifdef KNX_GUI
-  WinMain(GetModuleHandle(NULL), NULL, GetCommandLine(), SW_SHOWNORMAL);
-#endif
+  WinMain(GetModuleHandle(NULL), NULL, (LPSTR)GetCommandLine(), SW_SHOWNORMAL);
+#endif /* KNX_GUI */
 
 #ifdef WIN32
   /* windows specific */
@@ -2561,7 +3178,7 @@ main(int argc, char *argv[])
   InitializeConditionVariable(&cv);
   /* install Ctrl-C */
   signal(SIGINT, handle_signal);
-#endif
+#endif /* WIN32 */
 #ifdef __linux__
   /* Linux specific */
   struct sigaction sa;
@@ -2570,26 +3187,72 @@ main(int argc, char *argv[])
   sa.sa_handler = handle_signal;
   /* install Ctrl-C */
   sigaction(SIGINT, &sa, NULL);
-#endif
+  #define MAX_HOSTNAME 256
+  char hostname[MAX_HOSTNAME];
+  // set the hostname
+  ret = gethostname(&hostname[0], MAX_HOSTNAME);
+  if (ret != -1) {
+    printf("Hostname:    %s\n", hostname);
+    oc_core_set_device_hostname(0, hostname, MAX_HOSTNAME);
+  }
+#endif  /* __linux__ */
 
   for (int i = 0; i < argc; i++) {
     PRINT_APP("argv[%d] = %s\n", i, argv[i]);
-  }
-  if (argc > 1) {
-    if (strcmp(argv[1], "reset") == 0) {
+    if (strcmp(argv[i], "-help") == 0) {
+      print_usage();
+    }
+    if (strcmp(argv[i], "reset") == 0) {
       PRINT(" internal reset\n");
       g_reset = true;
     }
-    if (strcmp(argv[1], "-help") == 0) {
-      print_usage();
-    }
-  }
-  if (argc > 2) {
-     if (strcmp(argv[1], "-s") == 0) {
+    if (strcmp(argv[i], "-s") == 0) {
+      if (i + 1 < argc) {
         // serial number
-        PRINT("serial number %s\n", argv[2]);
-        app_set_serial_number(argv[2]);
-     }
+        PRINT("serial number %s\n", argv[i + 1]);
+        app_set_serial_number(argv[i + 1]);
+      } else {
+        PRINT("ERROR: \"-s\" flag detected, but no serial number provided!\n");
+      }
+    }
+#ifdef MQTT_PROXY
+      if (strcmp(argv[i], "-host") == 0) {
+        if (i + 1 < argc) {
+          // hostname for MQTT proxy server
+          PRINT("MQTT proxy host %s\n", argv[i + 1]);
+          strncpy(g_mqttconf_server, argv[i + 1], sizeof(g_mqttconf_server));
+        } else {
+          PRINT("ERROR: \"-host\" flag detected, but no hostname provided!\n");
+        }
+      }
+      if (strcmp(argv[i], "-port") == 0) {
+        if (i + 1 < argc) {
+          // port number for MQTT proxy server
+          PRINT("MQTT proxy port number %s\n", argv[i + 1]);
+          g_mqttconf_port = atoi(argv[i + 1]);
+        } else {
+          PRINT("ERROR: \"-port\" flag detected, but no port number provided!\n");
+        }
+      }
+      if (strcmp(argv[i], "-username") == 0) {
+        if (i + 1 < argc) {
+          // username for MQTT proxy server
+          PRINT("MQTT proxy username %s\n", argv[i + 1]);
+          strncpy(g_mqttconf_username, argv[i + 1], sizeof(g_mqttconf_username));
+        } else {
+          PRINT("ERROR: \"-username\" flag detected, but no username provided!\n");
+        }
+      }
+      if (strcmp(argv[i], "-pwd") == 0) {
+        if (i + 1 < argc) {
+          // password for MQTT proxy server
+          PRINT("MQTT proxy pwd %s\n", argv[i + 1]);
+          strncpy(g_mqttconf_pwd, argv[i + 1], sizeof(g_mqttconf_pwd));
+        } else {
+          PRINT("ERROR: \"-pwd\" flag detected, but no password provided!\n");
+        }
+      }
+#endif
   }
 
   /* do all initialization */
@@ -2609,7 +3272,7 @@ main(int argc, char *argv[])
       }
     }
   }
-#endif
+#endif /* WIN32 */
 
 #ifdef __linux__
   /* Linux specific loop */
@@ -2625,7 +3288,7 @@ main(int argc, char *argv[])
     }
     pthread_mutex_unlock(&mutex);
   }
-#endif
+#endif /* __linux__ */
 
   /* shut down the stack */
   oc_main_shutdown();

@@ -37,30 +37,42 @@
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
 
+#include <ctype.h>
 #include "knx_eink_battleships.h"
 #include "cascoda-util/cascoda_tasklet.h"
 #include "oc_core_res.h"
 #include "api/oc_knx_dev.h"
 #include "api/oc_knx_sec.h"
 #include "api/oc_knx_fp.h"
+#include "port/dns-sd.h"
 #include "oc_knx.h"
+#include "port/dns-sd.h"
+#include "openthread/thread.h"
+#include "openthread/ping_sender.h"
+#include "platform.h"
+#include "manufacturer_storage.h"
 ///////////////////////////////////////////////////////////////////////////////
 //               EINK code                                                   //
 ///////////////////////////////////////////////////////////////////////////////
-
+#include "sif_ssd1681.h"  // 1.5 inch display 
 #include "gfx_library.h"
 #include "gfx_driver.h"
 #include "knx_iot_image_1_54.h" // splash screen
-#include "sif_ssd1681.h"
-
 
 enum Screen g_screen_nr;
-uint32_t g_qr;
-bool g_eink_clean_redraw;
-ca_tasklet screen_Tasklet; 
+bool g_eink_clean_redraw = true;
+uint32_t g_eink_draws_without_refresh = 0;
+const uint32_t g_eink_draws_cutoff = 12;
+enum BattDisplaySymbol g_batt_display_symbol = BATT_DISPLAY_ICON;
+ca_tasklet screen_Tasklet;
+#ifdef TRANSLATE_PRESENT
+#define T translate
+extern char *translate(const char *s); 
+#else
+#define T(x) x
+#endif 
 
 #define SCHEDULE_NOW 0
-
 
 
 #include "cascoda-util/cascoda_tasklet.h"
@@ -237,8 +249,8 @@ static void game_fire_shot()
   if(g_game.currentPlayerNo != g_game.myPlayerNo)
     return;
   DPT_Uint_XY shot_pos;
-  shot_pos._X = g_game.tx;
-  shot_pos._Y = g_game.ty;
+  shot_pos.X = g_game.tx;
+  shot_pos.Y = g_game.ty;
   app_set_DPT_Uint_XY_variable(URL_SENDSHOT, &shot_pos);
   oc_do_s_mode_with_scope(5, URL_SENDSHOT, "w");
 }
@@ -637,7 +649,7 @@ static bool load_game_intro()
 */
 static void game_start()
 {
-  g_clean_redraw = true;
+  g_eink_clean_redraw  = true;
   set_screen(PLACE_SHIPS);
 }
 
@@ -663,12 +675,12 @@ static bool load_shot_info()
 
   DPT_Shot_Status *status = app_get_DPT_Shot_Status_variable(URL_RECEIVESHOTSTATUS, NULL);
   display_setCursor(0, 10);
-  if (!status->_F1 /*hit*/) {
+  if (!status->F_1 /*hit*/) {
     display_puts("MISS");
   } else {
-    display_puts(status->_F2?"SUNK":"HIT");
+    display_puts(status->F_2?"SUNK":"HIT");
     display_setCursor(0, 20);
-    display_puts(ship_names[status->_F3-1]);
+    display_puts(ship_names[status->F_3-1]);
   }
   display_setCursor(0, 40);
   display_puts("Press 4");
@@ -806,10 +818,6 @@ void app_initialize(void)
   game_setup();
 
 }
-static void init_globals()
-{
-  // Empty for now
-}
 
 /**
  * @brief Called when ShotStatus url is PUT
@@ -831,25 +839,25 @@ void onReceivedShotStatus(const char *url)
   DPT_Shot_Status *status = app_get_DPT_Shot_Status_variable(URL_RECEIVESHOTSTATUS, NULL);
   DPT_Uint_XY *shot = app_get_DPT_Uint_XY_variable(URL_SENDSHOT, NULL);
   struct battleships_board *board = &g_game.boards[player];
-  struct battleships_cell *cell = &(board->cells[shot->_X][shot->_Y]);
-  struct battleships_ship *ship = &g_game.ships[player][status->_F3-1];
+  struct battleships_cell *cell = &(board->cells[shot->X][shot->Y]);
+  struct battleships_ship *ship = &g_game.ships[player][status->F_3-1];
   int ship_idx = get_occupy_idx_from_ship(ship);
-  if (!status->_F1 /*hit*/) {
+  if (!status->F_1 /*hit*/) {
     cell->hitstate = HS_MISS;
   }else{
     cell->hitstate = HS_HIT;
     cell->occupy_index = ship_idx;
-    if (status->_F2 /*sunk*/) {
+    if (status->F_2 /*sunk*/) {
       ship->sunk = true;
-      ship->length = ship_lens[5-status->_F3];
+      ship->length = ship_lens[5-status->F_3];
       //locate the ship
       // it could be horizontal or vertical
       // we could be at the edge of it
       // if theres match at x-1, y then horiz
       int px;
       int py;
-      px = shot->_X;
-      py = shot->_Y;
+      px = shot->X;
+      py = shot->Y;
       // check up/down
       if (   (py > 0 && board->cells[px][py-1].occupy_index == ship_idx)
           || (py < 9 && board->cells[px][py+1].occupy_index == ship_idx)) {
@@ -884,7 +892,7 @@ void onReceivedShotStatus(const char *url)
   
   if (i != 5) {
     //redraw
-    g_clean_redraw = false;
+    g_eink_clean_redraw  = false;
     set_screen(SHOT_INFO);
 
     g_game.currentPlayerNo = player;
@@ -912,24 +920,24 @@ void onReceivedShot(const char *url)
   // place shot on our board
   enum PlayerNo player = swapPlayers(g_game.currentPlayerNo);
   struct battleships_board *board = &g_game.boards[player];
-  struct battleships_cell *cell = &(board->cells[shot->_X][shot->_Y]);
+  struct battleships_cell *cell = &(board->cells[shot->X][shot->Y]);
   struct battleships_ship *ship = get_occupy_from_idx(cell->occupy_index);
   struct battleships_ship *ships = g_game.ships[player];
 
   //it's now our turn!
 
   DPT_Shot_Status *status = app_get_DPT_Shot_Status_variable(URL_SENDSHOTSTATUS, NULL);
-  status->_F1 = false;
-  status->_F2 = false;
-  status->_F3 = _ShipType_NoHit;
+  status->F_1 = false;
+  status->F_2 = false;
+  status->F_3 = ShipTypeNo_Hit;
 
   if(cell->hitstate == HS_HIT)
     return;
 
   if (ship) {
     cell->hitstate = HS_HIT;
-    status->_F1 = true;
-    status->_F3 = 5-(ship-ships);
+    status->F_1 = true;
+    status->F_3 = 5-(ship-ships);
     int i;
     for(i = 0; i < ship->length; i++){
       uint8_t sx = ship->px + i*((ship->orientation==HORIZONTAL)?1:0);
@@ -938,7 +946,7 @@ void onReceivedShot(const char *url)
         break;
     }
     if (i == ship->length){
-      status->_F2 = true; /*sunk*/
+      status->F_2 = true; /*sunk*/
       ship->sunk = true;
     }
   }else{
@@ -956,12 +964,12 @@ void onReceivedShot(const char *url)
   }
   if (i != 5) {
     //redraw
-    g_clean_redraw = false;
+    g_eink_clean_redraw  = false;
     eink_load_screen(FIRE_SHOT);
 
     g_game.currentPlayerNo = player;
 
-    g_clean_redraw = false;
+    g_eink_clean_redraw  = false;
     TASKLET_ScheduleDelta(&screen_Tasklet, 2*1000, NULL);
   } else {
     set_screen(GAME_OVER);
@@ -1000,6 +1008,8 @@ void onReceivedReady(const char *url)
 }
 
 
+uint8_t user_interaction_occurred = 0;
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //               BUTTON Functions                                            //
@@ -1009,12 +1019,10 @@ void onReceivedReady(const char *url)
 //               EINK code                                                   //
 ///////////////////////////////////////////////////////////////////////////////
 
-bool g_clean_redraw = true;
-
-struct qr_code_t *g_qr_codes = NULL;
-struct reset_t *g_resets = NULL;
 int g_max_y_coord;
 int g_scroll_position;
+
+extern otInstance *OT_INSTANCE;
 
 oc_auth_at_t *get_auth_at_entry(int idx)
 {
@@ -1041,7 +1049,7 @@ static uint16_t scroll_adjust_coord(uint16_t num)
 // automatically adjust the coordinates of the string to display it
 // at the correct location on the screen based on the current scrolling
 // position.
-static void scroll_display_wrapper(uint16_t x, uint16_t y, char *str)
+static void scroll_display_wrapper(uint16_t x, uint16_t y, const char *str)
 {
   // Keep track of lowest line that will be displayed
   if (y > g_max_y_coord)
@@ -1075,17 +1083,65 @@ static bool is_scrollable_screen(void)
 // all calls to scroll_display_wrapper()
 static void show_scroll_bar(void)
 {
-// Put all the stuff below in a function
-#define SCALING_FACTOR 2
-#define BOTTOM_OFFSET 3 //bottom-most y coordinate above the bottom border
-#define TOP_OFFSET 13 //top-most y coordinate under the lower portion of the title border
+#define SCALING_FACTOR 4 
+#define BOTTOM_OF_HEADER 14
+#define TRIANGLE_HEIGHT 2
+#define TRIANGLE_BASE 4
+#define SCROLL_BAR_TOP_OFFSET (BOTTOM_OF_HEADER + TRIANGLE_HEIGHT + 1) //top-most y coordinate under the lower portion of the title border
 
-  int lower_y_coord = display_getHeight() - BOTTOM_OFFSET - SCALING_FACTOR * calculate_lines_to_scroll();//- SCALING_FACTOR * calculate_lines_to_scroll();
-  display_drawLine(1, TOP_OFFSET + SCALING_FACTOR * g_scroll_position, 1, lower_y_coord + SCALING_FACTOR * g_scroll_position, BLACK);
+#define TOP_TRIANGLE_X1 (width - 5)
+#define TOP_TRIANGLE_Y1 (BOTTOM_OF_HEADER + TRIANGLE_HEIGHT)
+#define TOP_TRIANGLE_X2 (TOP_TRIANGLE_X1 + TRIANGLE_BASE)
+#define TOP_TRIANGLE_Y2 (TOP_TRIANGLE_Y1)
+#define TOP_TRIANGLE_X3 (TOP_TRIANGLE_X1 + (TRIANGLE_BASE / 2))
+#define TOP_TRIANGLE_Y3 (BOTTOM_OF_HEADER)
 
-#undef SCALING_FACTOR
-#undef BOTTOM_OFFSET
-#undef TOP_OFFSET
+#define BOTTOM_TRIANGLE_X1 (TOP_TRIANGLE_X1)
+#define BOTTOM_TRIANGLE_Y1 (height - TRIANGLE_HEIGHT - 1)
+#define BOTTOM_TRIANGLE_X2 (TOP_TRIANGLE_X2)
+#define BOTTOM_TRIANGLE_Y2 (BOTTOM_TRIANGLE_Y1)
+#define BOTTOM_TRIANGLE_X3 (TOP_TRIANGLE_X3)
+#define BOTTOM_TRIANGLE_Y3 (BOTTOM_TRIANGLE_Y1 + TRIANGLE_HEIGHT)
+
+#define SCROLL_BAR_BOTTOM_OFFSET (BOTTOM_TRIANGLE_Y1 - 2)
+
+  int width = display_getWidth();
+  int height = display_getHeight();
+  int incremental_offset = SCALING_FACTOR * g_scroll_position;
+  int upper_y_coord = SCROLL_BAR_TOP_OFFSET + incremental_offset;
+  int lower_y_coord = SCROLL_BAR_BOTTOM_OFFSET - SCALING_FACTOR * calculate_lines_to_scroll() + incremental_offset;
+
+  // Scroll bar
+  display_drawLine(TOP_TRIANGLE_X3, upper_y_coord, TOP_TRIANGLE_X3, lower_y_coord, BLACK);
+
+  // Surrounding lines
+  display_drawLine(TOP_TRIANGLE_X3 - 1, SCROLL_BAR_TOP_OFFSET, TOP_TRIANGLE_X3 - 1, SCROLL_BAR_BOTTOM_OFFSET, BLACK);
+  display_drawLine(TOP_TRIANGLE_X3 + 1, SCROLL_BAR_TOP_OFFSET, TOP_TRIANGLE_X3 + 1, SCROLL_BAR_BOTTOM_OFFSET, BLACK);
+
+  // Upper triangle
+  display_drawTriangle(TOP_TRIANGLE_X1, TOP_TRIANGLE_Y1, TOP_TRIANGLE_X2, TOP_TRIANGLE_Y2, TOP_TRIANGLE_X3, TOP_TRIANGLE_Y3, BLACK);
+
+  // Lower triangle
+  display_drawTriangle(BOTTOM_TRIANGLE_X1, BOTTOM_TRIANGLE_Y1, BOTTOM_TRIANGLE_X2, BOTTOM_TRIANGLE_Y2, BOTTOM_TRIANGLE_X3, BOTTOM_TRIANGLE_Y3, BLACK);
+
+#undef SCALING_FACTOR 
+#undef BOTTOM_OF_HEADER 
+#undef TRIANGLE_HEIGHT 
+#undef TRIANGLE_BASE 
+#undef SCROLL_BAR_TOP_OFFSET 
+#undef TOP_TRIANGLE_X1 
+#undef TOP_TRIANGLE_Y1 
+#undef TOP_TRIANGLE_X2 
+#undef TOP_TRIANGLE_Y2 
+#undef TOP_TRIANGLE_X3 
+#undef TOP_TRIANGLE_Y3 
+#undef BOTTOM_TRIANGLE_X1 
+#undef BOTTOM_TRIANGLE_Y1 
+#undef BOTTOM_TRIANGLE_X2 
+#undef BOTTOM_TRIANGLE_Y2 
+#undef BOTTOM_TRIANGLE_X3 
+#undef BOTTOM_TRIANGLE_Y3 
+#undef SCROLL_BAR_BOTTOM_OFFSET 
 }
 
 void scroll_up()
@@ -1110,13 +1166,9 @@ void eink_display()
 {
 
 }
-static int g_selected_row;
-
-
-void screen_header_draw(enum Screen nr)
+static int g_selected_row;static void screen_header_draw(enum Screen nr)
 {
   int display_width  = display_getWidth();
-  int display_height = display_getHeight();
   char screen_str[32];
   int first_screen = TABLES_SCREEN+1;
   int num_screens = NUM_SCREENS-first_screen;
@@ -1124,12 +1176,8 @@ void screen_header_draw(enum Screen nr)
   const char *title = screen_get_title(nr);
   sprintf((char *)&screen_str, "%d", screen_nr);
   // generic stuff
-  display_drawRect(0, 0, display_width, display_width, BLACK);
-  display_drawLine(0, 12, display_width, 12, BLACK);
-  int width = ((float)display_width/(float)num_screens)*(screen_nr);
-  display_drawLine(0, 11, width, 11, BLACK);
-  display_drawLine(0, 10, width, 10, BLACK);
-  display_drawLine(0, 12, display_width, 12, BLACK);
+  display_drawLine(2, 12, display_width, 12, BLACK);
+
   if (title){
     display_setCursor(3, 2);
     snprintf(screen_str, 19, "%s", title);
@@ -1137,70 +1185,65 @@ void screen_header_draw(enum Screen nr)
     display_setCursor(35, 2);
     snprintf(screen_str, 19, "%d/%d", screen_nr, num_screens);
   }
-  display_puts(screen_str);
+  display_puts_max_n(screen_str, 11);
 }
 
-static const struct menu_t g_system_menu[] = {  
+static struct menu_t g_system_menu[] = {  
   {
     "QR Codes",
     &go_QR_SCREEN,
   }, 
   {
-    "Group Objects",
-    &go_GOT_SCREEN,
-  }, 
-  {
-    "Recipients",
-    &go_GRT_SCREEN,
-  }, 
-  {
-    "Publisher",
-    &go_GPT_SCREEN,
-  }, 
-  {
-    "Security",
-    &go_AUTH_SCREEN,
-  }, 
-  {
-    "Device info",
+    "Device Info",
     &go_DEV_SCREEN,
   }, 
   {
-    "Reset",
-    &go_RESET_SCREEN,
-  }, 
-  {
-    "Role",
+    "Connection",
     &go_ROLE_SCREEN,
   }, 
   {
-    "Tables",
+    "KNX Tables",
     &go_TABLES_SCREEN,
+  }, 
+  {
+    "Help",
+    &go_HELP_SCREEN,
   },  
 };
-const int system_menu_entries = 9;
 
-struct menu_t *g_cur_menu;
+void app_header_draw(enum Screen nr)
+{
+  screen_header_draw(nr);}
+
+const int system_menu_entries = 5;
+
+const struct menu_t *g_cur_menu;
 int g_cur_menu_entries;
 
-void draw_scrollable_menu(const struct menu_t* menu, int numentries)
+static int g_menu_screen_selected_row = 0;
+
+
+void draw_scrollable_menu(struct menu_t* menu, int numentries, enum Screen nr)
 {
+  if (nr == MENU_SCREEN)
+    g_selected_row = g_menu_screen_selected_row;
+
   g_cur_menu = menu;
   g_cur_menu_entries = numentries;
   for (int i = 0; i < numentries; i++) {
     if (g_selected_row == i)
+    {
       display_setTextColor(WHITE, BLACK);
+      display_drawLine(0, EINK_LINE_NO(i+1-g_scroll_position), 0, EINK_LINE_NO(i+1-g_scroll_position)+6, BLACK);
+    }
     else
+    {
       display_setTextColor(BLACK, WHITE);
-    scroll_display_wrapper(3, EINK_LINE_NO(i+1), menu[i].text);
+    }
+
+    scroll_display_wrapper(1, EINK_LINE_NO(i+1), T(menu[i].text));
   }
   display_setTextColor(WHITE, BLACK);
-}
-
-bool load_menu_screen()
-{
-  screen_header_draw(MENU_SCREEN);
-  draw_scrollable_menu(g_system_menu, system_menu_entries);
 }
 
 void menu_scroll()
@@ -1211,13 +1254,26 @@ void menu_scroll()
     g_scroll_position = g_selected_row;
 }
 
+
+bool load_menu_screen()
+{
+  app_header_draw(MENU_SCREEN);
+  menu_scroll();
+  draw_scrollable_menu(g_system_menu, system_menu_entries, MENU_SCREEN);
+}
+
 void menu_next()
 {
   g_selected_row++;
-  if (g_selected_row > (g_cur_menu_entries))
+  if (g_selected_row > (g_cur_menu_entries-1))
     g_selected_row = 0;
   menu_scroll();
   refresh_screen(false);
+  // do not refresh while in the menu, refresh will be done sholtly after entering a regular page
+  g_eink_draws_without_refresh = g_eink_draws_cutoff;
+  // cache the selected menu row (only for the system menu for now)
+  if(g_screen_nr == MENU_SCREEN)
+    g_menu_screen_selected_row = g_selected_row;
 }
 
 void menu_prev()
@@ -1227,6 +1283,9 @@ void menu_prev()
     g_selected_row = (g_cur_menu_entries-1);
   menu_scroll();
   refresh_screen(false);
+  g_eink_draws_without_refresh = g_eink_draws_cutoff;
+  if(g_screen_nr == MENU_SCREEN)
+    g_menu_screen_selected_row = g_selected_row;
 }
 
 void menu_select()
@@ -1239,282 +1298,123 @@ void menu_select()
 
 bool load_dev_screen()
 {
-  screen_header_draw(DEV_SCREEN);
+  app_header_draw(DEV_SCREEN);
   oc_device_info_t *device = oc_core_get_device_info(THIS_DEVICE);
   char screen_str[20];
   if (device == NULL) {
-    display_puts("Not inited");
+    display_setCursor(3, EINK_LINE_NO(1));
+    display_puts(T("Not initialised"));
     return true;  
   }
-  char* hwt = oc_string(device->hwt );
+
   display_setCursor(3, EINK_LINE_NO(1));
-  display_puts("LP4:Back SP4:PM");
+  strncpy(screen_str, oc_string(device->serialnumber), 19);
+  display_puts("S:");
+  display_puts(screen_str);
+
+  char* hwt = oc_string(device->hwt );
   display_setCursor(2, EINK_LINE_NO(2));
   display_puts("IA:");
   snprintf(screen_str, 19, "%d",
       device->ia);
   display_puts(screen_str);
   display_setCursor(2, EINK_LINE_NO(3));
-  display_puts("PM:");
-  if (device->pm) {
-    display_setTextColor(WHITE, BLACK);
-    display_puts(" true ");
-    display_setTextColor(BLACK, WHITE);
-  } else {
-    display_puts(" false ");
-  }
-  display_setCursor(2, EINK_LINE_NO(4));
   display_puts("HW:");
   snprintf(screen_str, 19, "%d %d %d",
       device->hwv.major,
       device->hwv.minor,
       device->hwv.patch);
   display_puts(screen_str);
-  display_setCursor(2, EINK_LINE_NO(5));
+  display_setCursor(2, EINK_LINE_NO(4));
   display_puts("SW:");
   snprintf(screen_str, 19, "%d %d %d",
       device->fwv.major,
       device->fwv.minor,
       device->fwv.patch);
   display_puts(screen_str);
-  display_setCursor(2, EINK_LINE_NO(6));
-  display_puts("Model:");
-  display_puts(oc_string(device->model));
-  display_setCursor(2, EINK_LINE_NO(7));
-  display_puts("HWT:");
+  display_setCursor(2, EINK_LINE_NO(5));
+  display_puts("HWT");
   display_puts(hwt);
-  return true;
-}
-
-bool load_got_screen()
-{
-  screen_header_draw(GOT_SCREEN);
-  oc_group_object_table_t *entry;
-  uint8_t cur_line = 1;
-  char c_flags_buffer[6];
-  char screen_str[20];
-
-  int max_entries = oc_core_get_group_object_table_total_size();
-  for (int i = 0; i < max_entries; ++i)
-  {
-    entry = oc_core_get_group_object_table_entry(i);
-    if (entry->ga_len <= 0) // There is no entry at that index
-      break;
-
-    // Print entry to the screen
-    /*
-    Entry %d (i + 1):
-    - id:
-    - href:
-    - cflags: --cd-d
-    - ga:
-      .
-      .
-      .
-    */
-    snprintf(screen_str, 19, "==> Entry %d ", i + 1);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    snprintf(screen_str, 19, "-id: %d", entry->id);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    snprintf(screen_str, 19, "-href:");
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    snprintf(screen_str, 19, "  %s", oc_string_checked(entry->href));
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-
-    c_flags_buffer[0] = '\0';
-    oc_cflags_as_string(c_flags_buffer, entry->cflags);
-    snprintf(screen_str, 19, "-cflags: %s", c_flags_buffer);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-
-    snprintf(screen_str, 19, "-ga:");
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    for (int j = 0; j < entry->ga_len; ++j)
-    {
-      snprintf(screen_str, 19, "  %d", entry->ga[j]);
-      scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    }
-  }
-  return true;
-}
-
-void load_grt_gpt_screen(int(*size_fn)(), void*(*entry_fn)(int))
-{
-
-  oc_group_rp_table_t *entry;
-  uint8_t cur_line = 1;
-  char screen_str[20];
-
-  int max_entries = (*size_fn)();
-  for (int i = 0; i < max_entries; ++i)
-  {
-    entry = (*entry_fn)(i);
-    if (entry->ga_len <= 0) // There is no entry at that index
-      break;
-
-    // Print entry to the screen
-    /*
-    Entry %d (i + 1):
-    - id:
-    - iid:
-    - grpid:
-    - ga:
-      .
-      .
-      .
-    */
-    snprintf(screen_str, 19, "==> Entry %d", i + 1);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    snprintf(screen_str, 19, "-id: %d", entry->id);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-
-    // uint64_t decimal number has max 20 numbers + 1 for terminator
-    char str[21];
-    oc_conv_uint64_to_dec_string(str, entry->iid);
-    snprintf(screen_str, 19, "-iid: %s", str);
-
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    snprintf(screen_str, 19, "-grpid: %d", entry->grpid);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-
-    snprintf(screen_str, 19, "-ga:");
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    for (int j = 0; j < entry->ga_len; ++j)
-    {
-      snprintf(screen_str, 19, "  %d", entry->ga[j]);
-      scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    }
-  }
-}
-
-bool load_grt_screen()
-{
-  screen_header_draw(GRT_SCREEN);
-  load_grt_gpt_screen(&oc_core_get_recipient_table_size, 
-                      &oc_core_get_recipient_table_entry);
-  return true;
-}
-
-bool load_gpt_screen()
-{
-  screen_header_draw(GPT_SCREEN);
-  load_grt_gpt_screen(&oc_core_get_publisher_table_size, 
-                      &oc_core_get_publisher_table_entry);
-  return true;
-}
-
-bool load_auth_screen()
-{
-  
-  screen_header_draw(AUTH_SCREEN);
-  oc_auth_at_t *entry;
-  uint8_t cur_line = 1;
-  char screen_str[20];
-
-  int max_entries = oc_core_get_at_table_size();
-  for (int i = 0; i < max_entries; ++i)
-  {
-    entry = get_auth_at_entry(i);
-    if (oc_string_len(entry->id) == 0) // There is no entry at that index
-      break;
-
-    // Print entry to the screen
-    /*
-    Entry %d (i + 1):
-    - id
-    ...
-    - osc_id
-    ...
-    - osc_rid
-    ...
-    - aud
-    ...
-    - ga:
-      .
-      .
-    typedef struct oc_auth_at_t
-    {
-      oc_string_t id;            
-      oc_interface_mask_t scope;
-      oc_at_profile_t
-        profile; 
-      oc_string_t aud;         
-      oc_string_t sub;         
-      oc_string_t kid;         
-      oc_string_t osc_version; 
-      oc_string_t osc_ms;      
-      uint8_t osc_hkdf;        
-      uint8_t osc_alg;         
-      oc_string_t osc_salt; 
-      oc_string_t osc_contextid;
-      oc_string_t osc_id; 
-      oc_string_t osc_rid;   
-      int nbf;     
-      int ga_len;  
-      int64_t *ga; 
-    } oc_auth_at_t;
-    */
-    snprintf(screen_str, 19, "==> Entry %d", i + 1);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), "-id:");
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), oc_string(entry->id));
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), "-osc_id:");
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), oc_string(entry->osc_id));
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), "-osc_rid:");
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), oc_string(entry->osc_rid));
-    scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), "-ga:");
-    for (int j = 0; j < entry->ga_len; j++) {
-      int64_t ga = entry->ga[j];
-      snprintf(screen_str, 19, "  %d", ga);
-      scroll_display_wrapper(3, EINK_LINE_NO(cur_line++), screen_str);
-    }
-
-  }
+  display_setCursor(2, EINK_LINE_NO(6));
+  display_puts(T("Model:"));
+  display_puts(oc_string(device->model));
   return true;
 }
 
 bool load_tables_screen()
 {
-  screen_header_draw(TABLES_SCREEN);
-  char screen_str[20];
+#ifdef __GNUC__
+  _Pragma("GCC diagnostic push");
+  _Pragma("GCC diagnostic ignored \"-Wincompatible-pointer-types\"");
+#endif
+  app_header_draw(TABLES_SCREEN);
+
+  // If the device has not been initialised, then show "device not initialised"
+  oc_device_info_t *device = oc_core_get_device_info(THIS_DEVICE);
+  if (device == NULL) {
+    display_setCursor(3, EINK_LINE_NO(1));
+    display_puts(T("Device not initialised."));
+
+    return true;
+  }
+
+  // If the lsm_state is not LSM_S_LOADED, then show "device not loaded"
+  if (oc_a_lsm_state(THIS_DEVICE) != LSM_S_LOADED)
+  {
+    display_setCursor(3, EINK_LINE_NO(1));
+    display_puts(T("Device not loaded."));
+
+    return true;
+  }
+
+  char iid_str[17];    // 16 + null terminator
+  char screen_str[30]; // 17 + enough for some extra characters e.g. "iid: "
+
+  oc_conv_uint64_to_hex_string(iid_str, device->iid);
+  display_setCursor(3, EINK_LINE_NO(1));
+  snprintf(screen_str, 17, "iid:h%s", iid_str);
+  display_puts(screen_str);
+
   uint8_t num_entries = 0;
-  uint8_t cur_line = 1;
+  uint8_t cur_line = 3;
 
   bool check_got_entry(oc_group_object_table_t *ga) { return oc_string_len(ga->href) != 0; }
-  bool check_grt_gpt_entry(oc_group_rp_table_t *grp) { return grp->ga_len != 0; }
+  bool check_grt_gpt_entry(oc_group_rp_table_t *grp) { return grp->id > -1; }
   bool check_sec_entry(oc_auth_at_t *at) { return oc_string_len(at->id) != 0; }
 
   struct table_fns_s{
     const char *fmt;
     int (*tbl_size_fn)(void);
     void *(*tbl_entry_fn)(int);
-    bool (*checker)(void*)
-  } table_fns[] = {
+    bool (*checker)(void*);
+  };
+  struct table_fns_s table_fns[] = {
     {
       "Grp Obj Tbl: %d",
-      &oc_core_get_group_object_table_total_size,
-      &oc_core_get_group_object_table_entry,
-      &check_got_entry
+      (void*)&oc_core_get_group_object_table_total_size,
+      (void*)&oc_core_get_group_object_table_entry,
+      (void*)&check_got_entry
     }, {
       "Rec Tbl: %d",
-      &oc_core_get_recipient_table_size,
-      &oc_core_get_recipient_table_entry,
-      &check_grt_gpt_entry
+      (void*)&oc_core_get_recipient_table_size,
+      (void*)&oc_core_get_recipient_table_entry,
+      (void*)&check_grt_gpt_entry
     }, {
       "Pub Tbl: %d",
-      &oc_core_get_publisher_table_size,
-      &oc_core_get_publisher_table_entry,
-      &check_grt_gpt_entry
+      (void*)&oc_core_get_publisher_table_size,
+      (void*)&oc_core_get_publisher_table_entry,
+      (void*)&check_grt_gpt_entry
     }, {
       "Sec Tbl: %d",
-      &oc_core_get_at_table_size,
-      &get_auth_at_entry,
-      &check_sec_entry
+      (void*)&oc_core_get_at_table_size,
+      (void*)&get_auth_at_entry,
+      (void*)&check_sec_entry
     }
   };
 
   const int num_tables = (sizeof(table_fns)/sizeof(table_fns[0])); 
 
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < num_tables; i++) {
     struct table_fns_s *fns = &table_fns[i];
     display_setCursor(3, EINK_LINE_NO(cur_line++));
     num_entries = 0;
@@ -1523,72 +1423,112 @@ bool load_tables_screen()
       if ((*fns->checker)((*fns->tbl_entry_fn)(j)))
         ++num_entries;
     }
+
     snprintf(screen_str, 20, fns->fmt, num_entries);
     display_puts(screen_str);
   }
 
   return true;
+#ifdef __GNUC__
+_Pragma("GCC diagnostic pop")
+#endif
 }
 
-bool load_reset_screen()
-{  
-  screen_header_draw(RESET_SCREEN);
-  struct reset_t *it = g_resets;
-  int i = 0;
-  while(it) {
-    if (g_selected_row == i)
-      display_setTextColor(WHITE, BLACK);
-    else
-      display_setTextColor(BLACK, WHITE);
-    scroll_display_wrapper(0, EINK_LINE_NO(i+1), it->desc);
-    i++;
-    it = it->next;
-  }
-  display_setTextColor(WHITE, BLACK);
+bool load_help_screen()
+{
+  app_header_draw(HELP_SCREEN);
+
+  const char *web_str = "cascoda.com/products";
+    SIF_SSD1681_overlay_qr_code(web_str, get_framebuffer(), 2, 25, 30);
+
   return true;
 }
 
-void reset_next()
-{
-  g_selected_row++;
-  if (g_selected_row >= num_resets())
-    g_selected_row = 0;
-  menu_scroll();
-  refresh_screen(false);
-}
+static bool should_go_back_to_sleep = false;
+static uint16_t replies_received = 0;
+static uint16_t requests_sent = 0;
 
-void reset_prev()
+static void ping_stat_cb(const otPingSenderStatistics *aStatistics, void *aContext)
 {
-  g_selected_row--;
-  if (g_selected_row < 0)
-    g_selected_row = num_resets()-1;
-  menu_scroll();
+  (void)aContext;
+  requests_sent += aStatistics->mSentCount;
+  replies_received += aStatistics->mReceivedCount;
   refresh_screen(false);
-}
-
-void reset_select()
-{
-  int i = g_selected_row;
-  struct reset_t *it = g_resets;
-  while (i && it) {
-    i--;
-    it = it->next;
-  }
-  if (!it)
-    return;
-  (it->do_reset)();
-  set_screen(MENU_SCREEN);
 }
 
 bool load_role_screen()
 {  
-  screen_header_draw(ROLE_SCREEN);
+  char screen_str[21];
+  const otExtAddress *addr = otLinkGetExtendedAddress(OT_INSTANCE);
+
+  app_header_draw(ROLE_SCREEN);
+
+  display_setCursor(1, EINK_LINE_NO(4));
+  snprintf(screen_str, 20, "%s: %s", T("Role"), T(otThreadDeviceRoleToString(otThreadGetDeviceRole(OT_INSTANCE))));
+  display_puts(screen_str);
+
+  if (otThreadGetDeviceRole(OT_INSTANCE) <= OT_DEVICE_ROLE_DETACHED)
+    goto exit;
+
+  if (addr)
+  {
+    display_setCursor(1, EINK_LINE_NO(1));
+    snprintf(screen_str, 20, "%02x%02x%02x%02x%02x%02x%02x%02x",
+            addr->m8[0],
+            addr->m8[1],
+            addr->m8[2],
+            addr->m8[3],
+            addr->m8[4],
+            addr->m8[5],
+            addr->m8[6],
+            addr->m8[7]);
+    display_puts(screen_str);
+  }
+
+  display_setCursor(1, EINK_LINE_NO(2));
+  snprintf(screen_str, 20, "0x%04x", otThreadGetRloc16(OT_INSTANCE));
+  display_puts(screen_str);
+
+  display_setCursor(1, EINK_LINE_NO(5));
+  display_puts(T("Pinging..."));
+
+  display_setCursor(1, EINK_LINE_NO(6));
+  snprintf(screen_str, 20, "%s %d", T("Requests:"), requests_sent);
+  display_puts(screen_str);
+
+  display_setCursor(1, EINK_LINE_NO(7));
+  snprintf(screen_str, 20, "%s %d", T("Replies:"), replies_received);
+  display_puts(screen_str);
+
+  otPingSenderConfig config;
+  memset(&config, 0, sizeof(config));
+  memcpy(&config.mDestination, otThreadGetRealmLocalAllThreadNodesMulticastAddress(OT_INSTANCE), sizeof(otIp6Address));
+  config.mReplyCallback = NULL;
+  config.mStatisticsCallback = ping_stat_cb;
+  config.mCallbackContext = NULL;
+  config.mCount = 1;
+  config.mInterval = 3000;
+  config.mTimeout = 5000;
+  config.mAllowZeroHopLimit = false;
+
+  if (!otThreadGetLinkMode(OT_INSTANCE).mRxOnWhenIdle) // Sleepy device
+  {
+    should_go_back_to_sleep = true;
+    otLinkModeConfig linkMode = {0};
+    linkMode.mRxOnWhenIdle = 1;
+    otThreadSetLinkMode(OT_INSTANCE, linkMode);
+  }
+
+  otPingSenderPing(OT_INSTANCE, &config);
+
+exit:
   return true;
 }
 
 bool load_splash_screen()
 {
   display_fixed_image(knx_iot_logo);
+
   return false;
 }
 
@@ -1626,80 +1566,128 @@ uint32_t num_generic(void *list) {
   return i;
 }
 
-void register_qr_code(struct qr_code_t *qrcode) {
-  register_generic(&g_qr_codes, qrcode);
-  if (g_screen_nr == QR_SCREEN)
-    refresh_screen(false);
-}
-
-void deregister_qr_code(struct qr_code_t *qrcode) {
-  return deregister_generic(&g_qr_codes, qrcode);
-  if (g_screen_nr == QR_SCREEN)
-    refresh_screen(false);
-}
-
-bool qr_code_is_registered(struct qr_code_t *qrcode) {
-  return generic_is_registered(g_qr_codes, qrcode);
-}
-
-uint32_t num_qr_codes() {
-  return num_generic(g_qr_codes);
-}
-
-void register_reset(struct reset_t *reset)
-{
-  register_generic(&g_resets, reset);
-  if (g_screen_nr == RESET_SCREEN)
-    refresh_screen(false);
-}
-
-void deregister_reset(struct reset_t *reset)
-{
-  deregister_generic(&g_resets, reset);
-  if (g_screen_nr == RESET_SCREEN)
-    refresh_screen(false);
-}
-
-bool reset_is_registered(struct reset_t *reset)
-{
-  return generic_is_registered(g_resets, reset);
-}
-
-uint32_t num_resets()
-{
-  return num_generic(g_resets);
-}
-
-
 bool load_qr_screen()
 {
-  char qr[100];
-  int i = 0;
-  struct qr_code_t *qrcode = g_qr_codes;
-  while (i < g_qr && qrcode) {
-    qrcode = qrcode->next;
-    i++;
-  }
-  if (qrcode != NULL){
-    strncpy(qr, qrcode->str_data, 99);
-    SIF_SSD1681_overlay_qr_code(qr, get_framebuffer(), 2, 20, 2);
-  } else {
-    strcpy(qr, "No QR codes registered!");
-  }
-  display_setCursor(1, 70);
-  display_setTextColor(BLACK, WHITE),
-  display_puts(qr);
-  return true;
-}
+#define O_NUM_PREFIX "1P"
+#define MAKE_STR(x) #x
+#define SN_PREFIX "+41S"
+#define EUI_PREFIX "+3ZEUI:"
+#define NET_PASS_PREFIX ".P:"
+#define APP_PASS_PREFIX ".PA:"
 
-static void qr_switch_screen()
-{
-  // QR code on THREAD
-  g_qr += 1;
-  if (g_qr >= num_qr_codes()) {
-    g_qr = 0;
+  char qr_str[100];
+
+  char thread_pw_str_arr[33];
+  const char *thread_pw_str_ptr;
+
+  uint8_t eui64_bytes[8];
+  char eui64_str[19]; // 8 bytes -> 16 characters + 1 null terminator
+
+  uint8_t sn_bytes[6];
+  char sn_str[13]; // 6 bytes -> 12 characters + 1 null terminator
+
+  char knx_pw_str_arr[33];
+  const char *knx_pw_str_ptr;
+
+  int error;
+
+  // Check if all the information is available in storage
+  error = knx_get_stored_thread_password(thread_pw_str_arr);
+  error |= knx_get_stored_eui64(eui64_bytes);
+  error |= knx_get_stored_serial_number(sn_bytes);
+  error |= knx_get_stored_password(knx_pw_str_arr);
+
+  if (error) // Some information is missing from storage
+  {
+    // Check if the device's KNX stack has been initialised
+    oc_device_info_t *device = oc_core_get_device_info(THIS_DEVICE);
+    if (device == NULL)
+    {
+      // Device's KNX stack is not initialised, only show Thread QR code
+      display_setCursor(2, EINK_LINE_NO(0));
+      display_puts("Thread");
+      PlatformGetQRString(qr_str, 64, OT_INSTANCE);
+    }
+    else
+    {
+      // Device's KNX stack is initialised, show the joint Thread + QR code
+      display_setCursor(2, EINK_LINE_NO(0));
+      display_puts("Thread + KNX");
+
+      thread_pw_str_ptr = PlatformGetJoinerCredential(OT_INSTANCE);
+
+      // eui64
+      otExtAddress eui64;
+      otLinkGetFactoryAssignedIeeeEui64(OT_INSTANCE, &eui64);
+      snprintf(eui64_str, sizeof(eui64_str), "%02X%02X%02X%02X%02X%02X%02X%02X",
+               eui64.m8[0],
+               eui64.m8[1],
+               eui64.m8[2],
+               eui64.m8[3],
+               eui64.m8[4],
+               eui64.m8[5],
+               eui64.m8[6],
+               eui64.m8[7]);
+
+      // serial number
+      snprintf(sn_str, sizeof(sn_str), "%s", oc_string(device->serialnumber));
+      uint8_t i = 0;
+      while (sn_str[i++])
+        sn_str[i - 1] = toupper(sn_str[i - 1]);
+
+      // knx password
+      knx_pw_str_ptr = app_get_password();
+
+      snprintf(qr_str, 100, O_NUM_PREFIX MAKE_STR() SN_PREFIX "%s" EUI_PREFIX "%s" NET_PASS_PREFIX "%s" APP_PASS_PREFIX "%s",
+               sn_str, eui64_str, thread_pw_str_ptr, knx_pw_str_ptr);
+    }
   }
-  refresh_screen(false);
+  else // All the information is available in storage
+  {
+    display_setCursor(2, EINK_LINE_NO(0));
+    display_puts("Thread + KNX");
+
+    // serial number in upper case
+    snprintf(sn_str,
+             sizeof(sn_str),
+             "%02X%02X%02X%02X%02X%02X",
+             sn_bytes[0],
+             sn_bytes[1],
+             sn_bytes[2],
+             sn_bytes[3],
+             sn_bytes[4],
+             sn_bytes[5]);
+
+    // eui64 in upper case
+    snprintf(eui64_str,
+             sizeof(eui64_str),
+             "%02X%02X%02X%02X%02X%02X%02X%02X",
+             eui64_bytes[0],
+             eui64_bytes[1],
+             eui64_bytes[2],
+             eui64_bytes[3],
+             eui64_bytes[4],
+             eui64_bytes[5],
+             eui64_bytes[6],
+             eui64_bytes[7]);
+
+    snprintf(qr_str, 100, O_NUM_PREFIX MAKE_STR() SN_PREFIX "%s" EUI_PREFIX "%s" NET_PASS_PREFIX "%s" APP_PASS_PREFIX "%s",
+             sn_str, eui64_str, thread_pw_str_arr, knx_pw_str_arr);
+  }
+
+  // Display the QR code
+  SIF_SSD1681_overlay_qr_code(qr_str, get_framebuffer(), 2, 18, EINK_LINE_NO(2));
+    
+  // Fading QR Codes are harder to read
+  g_eink_clean_redraw = true;
+  return true;
+
+#undef O_NUM_PREFIX
+#undef MAKE_STR
+#undef SERIAL_NUM_PREFIX 
+#undef EUI_PREFIX 
+#undef NETWORK_PASS_PREFIX 
+#undef APPLICATION_PASS_PREFIX 
 }
 
 // go to the next screen, either up or down
@@ -1755,24 +1743,16 @@ static bool load_pm_screen()
     display_puts("  ON");
   else
     display_puts("  OFF");
-  draw_buttons();
+  
+    draw_buttons();
+  
+
   return true;
-}
-
-
-static void toggle_pm()
-{
-  bool pm = oc_knx_device_in_programming_mode(THIS_DEVICE);
-  pm = !pm;
-  oc_knx_device_set_programming_mode(THIS_DEVICE, pm);
-  oc_device_info_t* device = oc_core_get_device_info(THIS_DEVICE);
-  knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
-  refresh_screen(false);
 }
 
 void refresh_screen(bool clean_redraw)
 {
-  g_clean_redraw |= clean_redraw;
+  g_eink_clean_redraw = clean_redraw;
   TASKLET_ScheduleDelta(&screen_Tasklet, SCHEDULE_NOW, NULL);
 }
 struct EinkScreenHandler g_screenHandlers[NUM_SCREENS] =
@@ -1791,56 +1771,25 @@ struct EinkScreenHandler g_screenHandlers[NUM_SCREENS] =
     .screen_button_2_ShortPress_cb = &menu_prev, 
   }, [QR_SCREEN] = {
     .load_screen_cb = &load_qr_screen,
-    .title = "QR codes",
-    .screen_button_3_ShortPress_cb = &qr_switch_screen, 
+    .title = "QR Codes",
+    .screen_button_3_ShortPress_cb = &go_CONNECTIVITY_SCREEN, 
     .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    
-  }, [GOT_SCREEN] = {
-    .load_screen_cb = &load_got_screen,
-    .title = "Group addrs",
-    .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    .screen_button_1_ShortPress_cb = &scroll_down, 
-    .screen_button_2_ShortPress_cb = &scroll_up, 
-  }, [GRT_SCREEN] = {
-    .load_screen_cb = &load_grt_screen,
-    .title = "Recipients",
-    .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    .screen_button_1_ShortPress_cb = &scroll_down, 
-    .screen_button_2_ShortPress_cb = &scroll_up, 
-  }, [GPT_SCREEN] = {
-    .load_screen_cb = &load_gpt_screen,
-    .title = "Publishers",
-    .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    .screen_button_1_ShortPress_cb = &scroll_down, 
-    .screen_button_2_ShortPress_cb = &scroll_up, 
-  }, [AUTH_SCREEN] = {
-    .load_screen_cb = &load_auth_screen,
-    .title = "Security",
-    .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    .screen_button_1_ShortPress_cb = &scroll_down, 
-    .screen_button_2_ShortPress_cb = &scroll_up, 
   }, [DEV_SCREEN] = {
     .load_screen_cb = &load_dev_screen,
     .title = "Device",
     .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    .screen_button_3_ShortPress_cb = &toggle_pm, 
-  }, [RESET_SCREEN] = {
-    .load_screen_cb = &load_reset_screen,
-    .title = "Reset",
-    .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    .screen_button_3_ShortPress_cb = &reset_select, 
-    .screen_button_1_ShortPress_cb = &reset_next, 
-    .screen_button_2_ShortPress_cb = &reset_prev, 
   }, [ROLE_SCREEN] = {
     .load_screen_cb = &load_role_screen,
-    .title = "Role",
+    .title = "Connection",
     .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
   }, [TABLES_SCREEN] = {
     .load_screen_cb = &load_tables_screen,
-    .title = "Tables",
-    
+    .title = "KNX Tables",
     .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-    
+  }, [HELP_SCREEN] = {
+    .load_screen_cb = &load_help_screen,
+    .title = "Help",
+    .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
   }, [GAME_INTRO] = {
     .load_screen_cb = &load_game_intro,
     .title = NULL,
@@ -1886,7 +1835,7 @@ struct EinkScreenHandler g_screenHandlers[NUM_SCREENS] =
 
 const char* screen_get_title(enum Screen screen)
 {
-  return g_screenHandlers[screen].title;
+  return T(g_screenHandlers[screen].title);
 }
 void button_1_ShortPress_cb(void *ctx)
 {
@@ -1933,6 +1882,24 @@ void button_3_Hold_cb(void *ctx)
 
 void eink_load_screen(enum Screen screen_nr)
 {
+  user_interaction_occurred = 1;
+
+  if (screen_nr != ROLE_SCREEN)
+  {
+    otPingSenderStop(OT_INSTANCE);
+    replies_received = 0;
+    requests_sent = 0;
+
+    // If device was sleeping before the pings, then go back to sleep now.
+    if (should_go_back_to_sleep)
+    {
+      should_go_back_to_sleep = false;
+      otLinkModeConfig linkMode = {0};
+      otThreadSetLinkMode(OT_INSTANCE, linkMode);
+    }
+  }
+
+  // Processing for loading the new screen.
   g_max_y_coord = EINK_LINE_NO(8); 
   if (g_screen_nr < 0 || screen_nr >= NUM_SCREENS) {
     //soft reset eink screens
@@ -1951,12 +1918,22 @@ void eink_load_screen(enum Screen screen_nr)
     show_scroll_bar();
   display_setCursor(0,0);
   display_setTextSize(1);
-  if (g_eink_clean_redraw) {
-    display_render_full();
+  if (g_eink_clean_redraw || g_eink_draws_without_refresh > g_eink_draws_cutoff) {
+      display_render_full();
     g_eink_clean_redraw = false;
+    g_eink_draws_without_refresh = 0;
+
   } else {
-    display_render_partial(false);
+      display_render_partial(false);
+    g_eink_draws_without_refresh++;
   }
+
+  oc_storage_write("screen_nr", &screen_nr, 1);
+}
+
+void go_CONNECTIVITY_SCREEN()
+{
+  set_screen(ROLE_SCREEN);
 }
 
 void eink_redraw()
@@ -1966,12 +1943,18 @@ void eink_redraw()
 
 ca_error eink_initial_screen(void *args)
 {
-  static int g_start_counter = 0; // initial check to draw splash screen
+#ifdef USE_STARTUP_FLOW
+  static int g_start_counter = 0;
+  PRINT_APP("USE_STARTUP_FLOW\n");
+#else
+  PRINT_APP("Jump at initial screen\n");
+  static int g_start_counter = 3;
+#endif
   oc_device_info_t* device = oc_core_get_device_info(THIS_DEVICE);
   if (g_start_counter == 0) {
     eink_load_screen(SPLASH_SCREEN);
     g_start_counter = 1;
-    TASKLET_ScheduleDelta(&screen_Tasklet, 5*1000, NULL);
+    TASKLET_ScheduleDelta(&screen_Tasklet, 3*1000, NULL);
     return CA_ERROR_SUCCESS;
   } else if (g_start_counter == 1) {
     g_start_counter = 2;
@@ -1987,7 +1970,22 @@ ca_error eink_initial_screen(void *args)
       go_first_screen();
       return CA_ERROR_SUCCESS;
     }
+  } else if (g_start_counter == 3) {
+    g_start_counter = 4;
+    g_eink_clean_redraw = true;
+    eink_load_screen(SPLASH_SCREEN);
+
+    g_screen_nr = 0;
+    oc_storage_read("screen_nr", &g_screen_nr, 1);
+
+    if (g_screen_nr == 0) // Meaning nothing was read from the storage
+      g_screen_nr = MENU_SCREEN; // Go to the navigation menu
+      
+    TASKLET_ScheduleDelta(&screen_Tasklet, 3 * 1000, NULL);
+
+    return CA_ERROR_SUCCESS;
   }
+
   eink_load_screen(g_screen_nr);
   return CA_ERROR_SUCCESS;
 }
@@ -1999,8 +1997,18 @@ ca_error eink_initial_screen(void *args)
 
 void logic_initialize()
 {
-  
 // screen update, do it ASAP since it is the splash screen
   TASKLET_Init(&screen_Tasklet, &eink_initial_screen);
   TASKLET_ScheduleDelta(&screen_Tasklet, INITIAL_SCREEN_TIMEOUT, NULL); 
+}
+
+void logic_role_changed()
+{
+if (g_screen_nr == ROLE_SCREEN || g_screen_nr == DEV_SCREEN)
+    refresh_screen(true); 
+}
+
+bool logic_is_role_screen()
+{
+  return (g_screen_nr == ROLE_SCREEN); 
 }

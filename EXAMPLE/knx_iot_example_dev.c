@@ -72,6 +72,7 @@
 #include "cascoda-util/cascoda_time.h"
 #include "cascoda-bm/cascoda_wait.h"
 #include "ca821x_error.h"
+#include "sed_poll.h"
 #include <openthread/thread.h> 
 #include <platform.h>
 
@@ -83,6 +84,7 @@
 
 #ifdef SLEEPY
 #include "knx_iot_sleepy_main_extern.h"
+#include "knx_iot_sleepy_main.h"
 #else
 #include "knx_iot_wakeful_main_extern.h"
 #endif
@@ -102,6 +104,9 @@
 #ifdef SLEEPY
 #include "sed_poll.h"
 #endif
+
+// forward declaration.
+void dev_put_callback(const char* url);
 //
 // code for programming mode and reset
 //
@@ -277,6 +282,8 @@ static void reset_hold_cb(void *context)
       oc_device_info_t* device = oc_core_get_device_info(0);
       knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
 
+      
+
       break;
 
     case THREAD_RESET:
@@ -391,6 +398,17 @@ static ca_error programming_mode_handler(void *context)
   TASKLET_ScheduleDelta(&g_programming_mode_handler, PROGRAMMING_MODE_INDICATOR_FLASHING_PERIOD_MS / 2, NULL);
 }
 
+static ca_error become_sleepy(void *ctx)
+{
+  otLinkModeConfig linkMode = {0};
+  otThreadSetLinkMode(OT_INSTANCE, linkMode);
+  // Poll after the child tells its parent it is a SED once more
+  SED_PollSoon();
+  return CA_ERROR_SUCCESS;
+}
+
+static ca_tasklet become_sleepy_tasklet;
+
 /**
  * @brief exit the programming mode
  * e.g. stop flickering the LED
@@ -399,11 +417,6 @@ static ca_error programming_mode_handler(void *context)
  */
 static void exit_programming_mode(size_t device_index)
 {
-#ifdef SLEEPY
-  SED_SetMinDelay(1500);
-  SED_SetMaxDelay(SED_POLL_PERIOD);
-  knx_service_sleep_period(SED_POLL_PERIOD);
-#endif
   oc_knx_device_set_programming_mode(device_index, false);
   TASKLET_Cancel(&g_programming_mode_handler);
 
@@ -413,6 +426,11 @@ static void exit_programming_mode(size_t device_index)
 
   oc_device_info_t* device = oc_core_get_device_info(0);
   knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+#ifdef SLEEPY
+  // Devices remain awake for 20 seconds after PM mode is disabled, to ensure programming
+  // is fast and reliable
+  TASKLET_ScheduleDelta(&become_sleepy_tasklet, 20 * 1000, NULL);
+#endif
 }
 
 /**
@@ -425,10 +443,10 @@ static void enter_programming_mode(size_t device_index)
 {
 #ifdef SLEEPY
   // When in programming mode, devices must respond within 2 seconds
-  SED_SetMinDelay(250);
-  SED_SetMaxDelay(1500);
-  knx_service_sleep_period(SED_POLL_PERIOD);
-  SED_PollNow();
+  otLinkModeConfig linkMode = {0};
+  linkMode.mRxOnWhenIdle = 1;
+  otThreadSetLinkMode(OT_INSTANCE, linkMode);
+  TASKLET_Cancel(&become_sleepy_tasklet);
 #endif
   oc_knx_device_set_programming_mode(device_index, true);
   TASKLET_ScheduleDelta(&g_programming_mode_handler, SCHEDULE_NOW, NULL);
@@ -446,6 +464,11 @@ static void prog_mode_short_press_cb(void *context)
 {
   (void)context;
   PRINT_APP("=== prog_mode_short_press_cb()\n");
+
+  // if the device is not initialized, the check for PM always returns false
+  // and the PM indicator cannot be turned off, so we return early
+  if (otThreadGetDeviceRole(OT_INSTANCE) <= OT_DEVICE_ROLE_DETACHED)
+    return;
 
   // If in programming mode, exit. Otherwise enter.
   if (oc_knx_device_in_programming_mode(THIS_DEVICE))
@@ -586,7 +609,9 @@ return DVBD_CanSleep();
 // Sleepy Device
 void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
 {
-  uint32_t taskletTimeLeft = SED_POLL_PERIOD;
+  // 20 min wakeup if no tasklet is scheduled (should not happen)
+  uint32_t taskletTimeLeft = 20 * 60 * 1000;
+
 
   /* schedule wakeup */
   TASKLET_GetTimeToNext(&taskletTimeLeft);
@@ -613,6 +638,7 @@ void hardware_reinitialise(void)
 } 
 #endif // SLEEPY
 
+
 /**
  * @brief do the hardware installation
  *
@@ -623,15 +649,11 @@ void hardware_init()
   /* set the put callback on the underlaying code */
   app_set_put_cb(dev_put_callback);
   //app_set_get_cb(dev_get_callback);
-#ifdef SLEEPY
-  // Initialize sleepy timeout handler
-  SED_InitPolling(250, SED_POLL_PERIOD);
 #ifdef SLEEPY_USE_LED
   // Debug: blink programming mode indicator on wakeup
   // hardcoded pin # of sensor board pm mode led
 	BSP_ModuleRegisterGPIOOutputOD(36, MODULE_PIN_TYPE_LED);
   BSP_ModuleSetGPIOPin(36, LED_ON);
-#endif
 #endif
   /* Initialize knx-specific development board functionality */
   knx_specific_init();
@@ -641,9 +663,6 @@ void hardware_init()
 
 DVBD_RegisterLEDOutput(DEV_SWITCH_2, JUMPER_POS_1);   
 
- 
-  
-
 
 
 
@@ -652,7 +671,10 @@ DVBD_RegisterLEDOutput(DEV_SWITCH_2, JUMPER_POS_1);
   actuator_test_init();
 #endif
 
- 
+#ifdef SLEEPY
+    // default sleepy polling: poll every 10 minutes
+    SED_InitPolling(1500, 10 * 60 * 1000, 0);
+#endif
 }
 
 void setLED(led_t led, bool value)
@@ -671,29 +693,11 @@ void setLED(led_t led, bool value)
 void hardware_poll()
 {
 #ifndef EXCLUDE_CASCODA_BAREMETAL
-  // Needs to be here for the programming mode button
-  // Calling this twice in a row should be safe, as there is edge
-  // detection and it is called in a loop anyways
-  
+
   
   DVBD_PollButtons();
-   
-
-
-#endif /* EXCLUDE_CASCODA_BAREMETAL */
   
-  DVBD_PollButtons();
-   
 
-
-
-
-
-#ifndef EXCLUDE_CASCODA_BAREMETAL
-  // Add a delay so we don't poll too fast
-  // as this affects the brightness of the 
-  // shared LEDs
-  WAIT_ms(3);
 #endif /* EXCLUDE_CASCODA_BAREMETAL */
 }
 
@@ -713,7 +717,7 @@ bool app_is_url_in_use(const char* url)
     }
   }
   return false;
-} 
+}
 
 #ifdef ACTUATOR_TEST_MODE
 /* code for actuator testing */

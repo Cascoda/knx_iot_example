@@ -60,27 +60,41 @@
 
 #include "oc_api.h"
 #include "oc_core_res.h"
+#include "api/oc_knx_dev.h"
 #include "api/oc_knx_fp.h"
 #include "port/oc_clock.h"
 #include "port/dns-sd.h"
+#ifndef EXCLUDE_CASCODA_BAREMETAL
+
 #include "cascoda-bm/cascoda_sensorif.h"
 #include "cascoda-bm/cascoda_interface.h"
 #include "cascoda-util/cascoda_tasklet.h"
 #include "cascoda-util/cascoda_time.h"
-#include "devboard_btn.h"
-#include "devboard_btn_ext.h"
+#include "cascoda-bm/cascoda_wait.h"
 #include "ca821x_error.h"
+#include "sed_poll.h"
 #include <openthread/thread.h> 
 #include <platform.h>
 
+//#include "sif_btn_ext_pi4ioe5v6408.h"
+
+#include "devboard_btn.h"
+#include "devboard_btn_ext.h"
+ 
+
 #ifdef SLEEPY
 #include "knx_iot_sleepy_main_extern.h"
+#include "knx_iot_sleepy_main.h"
 #else
 #include "knx_iot_wakeful_main_extern.h"
 #endif
-#include "knx_eink_battleships.h"
 #include "sif_ssd1681.h"  // 1.5 inch display
 #define SPI_NUM 1
+
+#endif /* EXCLUDE_CASCODA_BAREMETAL */
+#include "knx_eink_battleships.h"
+
+
 
 // generic defines
 #define SCHEDULE_NOW 0
@@ -90,12 +104,11 @@
 #define THIS_DEVICE 0
 
 #ifdef SLEEPY
-// tick timer upon last wake
-static uint32_t g_time_of_last_wake;
-// tasklet for Thread keep-alive
-static ca_tasklet g_sed_poll_tasklet; 
-extern otInstance *OT_INSTANCE; 
+#include "sed_poll.h"
 #endif
+
+// forward declaration.
+void dev_put_callback(const char* url);
 
 /**
  * @brief retrieve the fault state of the url/data point
@@ -106,6 +119,7 @@ extern otInstance *OT_INSTANCE;
  * @return false value is false or error.
  */
 bool app_retrieve_fault_variable(const char* url);
+
 
 
 
@@ -166,24 +180,6 @@ void dev_put_callback(const char* url){
  * @param url the url that received a GET invocation.
  */
 void dev_get_callback(const char* url){
-  if (strcmp(url, URL_RECEIVESHOT) == 0) {
-      if (strcmp(url, URL_RECEIVESHOT) == 0)
-      {
-        onReceivedShot(url);
-      }
-  }
-  if (strcmp(url, URL_RECEIVESHOTSTATUS) == 0) {
-      if (strcmp(url, URL_RECEIVESHOTSTATUS) == 0)
-      {
-        onReceivedShotStatus(url);
-      }
-  }
-  if (strcmp(url, URL_RECEIVEREADY) == 0) {
-      if (strcmp(url, URL_RECEIVEREADY) == 0)
-      {
-        onReceivedReady(url);
-      }
-  }
 }
 /**
  * @brief reset the device (knx only)
@@ -216,30 +212,23 @@ void programming_mode_embedded(size_t device_index, bool programming_mode)
   oc_knx_device_set_programming_mode(device_index, programming_mode);
   
   if (g_screen_nr == DEV_SCREEN)
-    refresh_screen(false); 
+    refresh_screen(false);
 }
 
 
 #ifdef SLEEPY
-
 // Sleepy handler for programming mode button
 bool hardware_can_sleep()
 {
-#ifdef SLEEPY
-  return (DVBD_CanSleep() && !oc_knx_device_in_programming_mode(THIS_DEVICE));
-#else
-  return DVBD_CanSleep();
-#endif
+return DVBD_CanSleep();
 }
 
 // Sleepy Device
 void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
 {
-  uint32_t taskletTimeLeft = SED_POLL_PERIOD;
+  // 20 min wakeup if no tasklet is scheduled (should not happen)
+  uint32_t taskletTimeLeft = 20 * 60 * 1000;
 
-  /* Schedule a data poll if one is not already scheduled */
-  if (!TASKLET_IsQueued(&g_sed_poll_tasklet))
-    TASKLET_ScheduleDelta(&g_sed_poll_tasklet, SED_POLL_PERIOD, NULL);
 
   /* schedule wakeup */
   TASKLET_GetTimeToNext(&taskletTimeLeft);
@@ -247,22 +236,25 @@ void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
   if (taskletTimeLeft > nextAppEvent)
     taskletTimeLeft = nextAppEvent;
 
-  bool has_min_awake_time_passed = TIME_Cmp(TIME_ReadAbsoluteTime(), g_time_of_last_wake + SED_MIN_AWAKE_TIME) >= 0;
-  bool sleep_after_joining = has_min_awake_time_passed || (otThreadGetDeviceRole(OT_INSTANCE) != OT_DEVICE_ROLE_DETACHED);
+  bool sleep_after_joining = otThreadGetDeviceRole(OT_INSTANCE) != OT_DEVICE_ROLE_DETACHED;
 
   /* check that it's worth going to sleep */
   if (taskletTimeLeft > 100 && sleep_after_joining)
   {
     /* and sleep */
-    DVBD_DevboardSleep(taskletTimeLeft, pDeviceRef);
-    g_time_of_last_wake = TIME_ReadAbsoluteTime();
+    DVBD_DevboardSleep(taskletTimeLeft, pDeviceRef); 
   }
 }
 
 void hardware_reinitialise(void)
 {
+#ifdef SLEEPY_USE_LED
+  // hardcoded pin # of sensor board pm mode led
+  BSP_ModuleSetGPIOPin(36, LED_ON);
+#endif
 } 
 #endif // SLEEPY
+
 
 /**
  * @brief do the hardware installation
@@ -274,36 +266,27 @@ void hardware_init()
   /* set the put callback on the underlaying code */
   app_set_put_cb(dev_put_callback);
   //app_set_get_cb(dev_get_callback);
-#ifdef SLEEPY
-  // Initialize sleepy timeout handler
-  TASKLET_Init(&g_sed_poll_tasklet, &sed_poll_handler);
-  g_time_of_last_wake = TIME_ReadAbsoluteTime(); 
-
 #ifdef SLEEPY_USE_LED
   // Debug: blink programming mode indicator on wakeup
-  DVBD_RegisterLEDOutput(PROGRAMMING_MODE_INDICATOR, JUMPER_POS_1);
-  DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, LED_ON); 
-#endif
+  // hardcoded pin # of sensor board pm mode led
+	BSP_ModuleRegisterGPIOOutputOD(36, MODULE_PIN_TYPE_LED);
+  BSP_ModuleSetGPIOPin(36, LED_ON);
 #endif
   /* Eink Initialisation */
   SENSORIF_SPI_Config(SPI_NUM);
   SIF_SSD1681_Initialise();
   DVBD_RegisterButtonIRQInput(DEV_SWITCH_2, JUMPER_POS_1); 
   DVBD_SetButtonShortPressCallback(DEV_SWITCH_2, &button_1_ShortPress_cb, NULL, BTN_SHORTPRESS_RELEASED);
-  DVBD_SetButtonLongPressCallback(DEV_SWITCH_2, &button_1_LongPress_cb, NULL, BTN_LONGPRESS_TIME_DEFAULT);  
+  DVBD_SetButtonLongPressCallback(DEV_SWITCH_2, &button_1_LongPress_cb, NULL, BTN_LONGPRESS_TIME_DEFAULT);   
   DVBD_RegisterButtonIRQInput(DEV_SWITCH_3, JUMPER_POS_1); 
   DVBD_SetButtonShortPressCallback(DEV_SWITCH_3, &button_2_ShortPress_cb, NULL, BTN_SHORTPRESS_RELEASED);
-  DVBD_SetButtonLongPressCallback(DEV_SWITCH_3, &button_2_LongPress_cb, NULL, BTN_LONGPRESS_TIME_DEFAULT);  
+  DVBD_SetButtonLongPressCallback(DEV_SWITCH_3, &button_2_LongPress_cb, NULL, BTN_LONGPRESS_TIME_DEFAULT);   
   DVBD_RegisterButtonIRQInput(DEV_SWITCH_4, JUMPER_POS_1); 
   DVBD_SetButtonShortPressCallback(DEV_SWITCH_4, &button_3_ShortPress_cb, NULL, BTN_SHORTPRESS_RELEASED);
   DVBD_SetButtonLongPressCallback(DEV_SWITCH_4, &button_3_LongPress_cb, NULL, BTN_LONGPRESS_TIME_DEFAULT);
-  DVBD_SetButtonHoldCallback(DEV_SWITCH_4, &button_3_Hold_cb, NULL, BTN_HOLD_TIME_DEFAULT);    
+  DVBD_SetButtonHoldCallback(DEV_SWITCH_4, &button_3_Hold_cb, NULL, BTN_HOLD_TIME_DEFAULT);     
 
  
-
-// gfx_drv_initialise(); 
-
-  
 
 
 
@@ -316,43 +299,11 @@ void hardware_init()
   actuator_test_init();
 #endif
 
-if (!otDatasetIsCommissioned(OT_INSTANCE))
-  {
-    PRINT_APP("Registering THREAD qr code");
-    static struct qr_code_t ot_qr_code;
-    static char ot_data_buf[64];
-    ot_qr_code.str_data = ot_data_buf;
-    PlatformGetQRString(ot_data_buf, 63, OT_INSTANCE);
-    ot_qr_code.desc = "Thread QR code";
-    register_qr_code(&ot_qr_code);
-  }
-
-  void do_knx_reset(){
-    const char *url = NULL;
-    for (int i = 0; url = app_get_parameter_url(i); i++) {
-      oc_storage_erase(url);
-    }
-    oc_reset_device(THIS_DEVICE, 2);
-  }
-
-  void do_thread_reset(){
-    PlatformEraseJoinerCredentials(OT_INSTANCE);
-    BSP_SystemReset(SYSRESET_APROM);
-  }
-
-  //register resets
-  static struct reset_t knx_reset, ot_reset;
-  knx_reset.desc = "KNX reset";
-  knx_reset.do_reset = &do_knx_reset;
-  ot_reset.desc = "Thread reset";
-  ot_reset.do_reset = &do_thread_reset;
-  register_reset(&knx_reset);
-  register_reset(&ot_reset); 
-
-
-
+#ifdef SLEEPY
+    // default sleepy polling: poll every 10 minutes
+    SED_InitPolling(1500, 10 * 60 * 1000, 0);
+#endif
 }
-
 
  
 
@@ -363,11 +314,13 @@ if (!otDatasetIsCommissioned(OT_INSTANCE))
  */
 void hardware_poll()
 {
+#ifndef EXCLUDE_CASCODA_BAREMETAL
+
+  
   DVBD_PollButtons();
-  // Add a delay so we don't poll too fast
-  // as this affects the brightness of the 
-  // shared LEDs
-  WAIT_ms(3);
+  
+
+#endif /* EXCLUDE_CASCODA_BAREMETAL */
 }
 
 bool app_is_url_in_use(const char* url)
@@ -387,8 +340,6 @@ bool app_is_url_in_use(const char* url)
   }
   return false;
 }
-
- 
 
 #ifdef ACTUATOR_TEST_MODE
 /* code for actuator testing */
@@ -422,6 +373,9 @@ void actuator_test_init()
 }
 
 #endif // ACTUATOR_TEST_MODE
+
+#ifndef EXCLUDE_CASCODA_BAREMETAL
 //embedded is always built with 
 __attribute__((__weak__)) 
 extern void app_initialize(){}
+#endif /* EXCLUDE_CASCODA_BAREMETAL */

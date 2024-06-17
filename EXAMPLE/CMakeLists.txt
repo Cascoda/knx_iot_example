@@ -54,7 +54,7 @@ if(USE_GITLAB)
   set(KNX_IOT_STACK_REPO https://gitlab.knx.org/shared-projects/knx-iot-point-api-public-stack/ CACHE STRING "")
 else()
   set(KNX_REPO knx-iot-stack)
-  set(KNX_IOT_STACK_REPO https://github.com/KNX-IOT/KNX-IOT-STACK.git CACHE STRING "")
+  set(KNX_IOT_STACK_REPO https://github.com/cascoda/knx-iot-stack.git CACHE STRING "")
 endif()
 
 # KNX IoT Stack
@@ -70,6 +70,7 @@ FetchContent_Declare(
     GIT_REPOSITORY ${CASCODA_SDK_REPO}
     GIT_TAG ${CASCODA_SDK_REF}
 )
+
 
 if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
 

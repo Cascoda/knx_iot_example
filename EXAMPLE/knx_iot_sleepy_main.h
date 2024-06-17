@@ -36,56 +36,28 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "cascoda-bm/cascoda_interface.h"
-#include "cascoda-bm/cascoda_types.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-    /**
-     * @brief define what happens when receiving a post mesage on a URL
-     *
-     * @param url the URL of the message as a string
-     */
-    void post_callback(char *url);
+/* calls that are implemented in sleepy main */
 
-    /**
-     * @brief any hardware specific setup e.g. registering board LEDs and buttons
-     *
-     */
-    void hardware_init();
+/**
+ * @brief sets the sleep time of the device (e.g. child)
+ *
+ * @param seconds, time in seconds
+ */
+void main_SetThreadChildTimeout(int seconds);
 
-    /**
-     * @brief any hardware independent setup e.g. setting up graphics
-     *
-     */
-    void logic_initialize();
-
-    /**
-     * @brief any action to take as a result of the role changing, e.g. refreshing screen
-     *
-     */
-    void logic_role_changed();
-
-    /**
-     * @brief any hardware specific actions to be continually run e.g. checking buttons for input
-     *
-     */
-    void hardware_poll();
-
-    /**
-     * @brief Application-specific handling of programming mode command received from linker
-     *
-     */
-    void programming_mode_embedded(size_t device_index, bool programming_mode);
-
-    /**
-     * @brief Application-specific handling of reset when received from linker
-     *
-     */
-    void reset_embedded(size_t device_index, int reset_value, void *data);
+/**
+ * @brief kicks off the resynch mechanism: sending of MLE Child Update Requests
+ *        periodically to reattach to the parent in case the child was timed out
+ *
+ * @param seconds, time in seconds
+ */
+void main_KickOffChildResynchMechanism(int seconds);
 
 #ifdef __cplusplus
 }

@@ -53,7 +53,7 @@ The general structure of these programs are:
 
 - manufactorer : 
 - model : dev board example
-- hardware_type : 000001
+- hardware_type : 000000000000
 - hardware version : [0, 4, 0]
 - firmware version : [0, 4, 0]
 

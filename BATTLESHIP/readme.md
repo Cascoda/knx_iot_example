@@ -45,9 +45,9 @@ The general structure of these programs are:
 
 - manufactorer : 
 - model : KNX Battleships Demo eink
-- hardware_type : Windows
-- hardware version : [0, 1, 3]
-- firmware version : [0, 1, 1]
+- hardware_type : 000000000000
+- hardware version : [0, 4, 0]
+- firmware version : [0, 4, 0]
 
 ### Data points
 

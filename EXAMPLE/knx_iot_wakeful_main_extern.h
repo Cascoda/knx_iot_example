@@ -33,52 +33,59 @@
  * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include "cascoda-bm/cascoda_interface.h"
 #include "cascoda-bm/cascoda_types.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-/**
- * @brief define what happens when receiving a post mesage on a URL
- *
- * @param url the URL of the message as a string
- */
-void post_callback(char *url);
+    /**
+     * @brief define what happens when receiving a post mesage on a URL
+     *
+     * @param url the URL of the message as a string
+     */
+    void post_callback(char *url);
 
-/**
- * @brief any hardware specific setup e.g. registering board LEDs and buttons
- *
- */
-void hardware_init();
+    /**
+     * @brief any hardware specific setup e.g. registering board LEDs and buttons
+     *
+     */
+    void hardware_init();
 
-/**
- * @brief any hardware independent setup e.g. setting up graphics
- *
- */
-void logic_initialize();
+    /**
+     * @brief any hardware independent setup e.g. setting up graphics
+     *
+     */
+    void logic_initialize();
 
-/**
- * @brief any hardware specific actions to be continually run e.g. checking buttons for input
- *
- */
-void hardware_poll();
+    /**
+     * @brief any action to take as a result of the role changing, e.g. refreshing screen
+     *
+     */
+    void logic_role_changed();
 
-/**
- * @brief Application-specific handling of programming mode command received from linker
- *
- */
-void programming_mode_embedded(size_t device_index, bool programming_mode);
+    /**
+     * @brief any hardware specific actions to be continually run e.g. checking buttons for input
+     *
+     */
+    void hardware_poll();
 
-/**
- * @brief Application-specific handling of reset when received from linker
- *
- */
-void reset_embedded(size_t device_index, int reset_value, void *data);
+    /**
+     * @brief Application-specific handling of programming mode command received from linker
+     *
+     */
+    void programming_mode_embedded(size_t device_index, bool programming_mode);
+
+    /**
+     * @brief Application-specific handling of reset when received from linker
+     *
+     */
+    void reset_embedded(size_t device_index, int reset_value, void *data);
 
 #ifdef __cplusplus
 }

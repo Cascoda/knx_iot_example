@@ -40,7 +40,8 @@ mkdir -p build_win_bin
 cd build_win_bin
 # create the make files for Windows/Linux
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=../arm_gcc_m2351.cmake -DOC_OSCORE_ENABLED=ON \
-      -DOC_DNS_SD_ENABLED=ON -DOC_PRINT_ENABLED=OFF -DOC_PRINT_APP_ENABLED=OFF
+      -DOC_DNS_SD_ENABLED=ON -DOC_PRINT_ENABLED=OFF -DOC_PRINT_APP_ENABLED=OFF 
+#-DCASCODA_USE_PRIVATE_SDK=ON
 cmake .
 # build it
 ninja

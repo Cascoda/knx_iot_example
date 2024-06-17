@@ -1,6 +1,6 @@
 /*
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
- Copyright (c) 2022-2023 Cascoda Limited
+ Copyright (c) 2022-2024 Cascoda Limited
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  * All rights reserved.
  *
@@ -100,6 +100,7 @@ void knx_srp_add_service(void);
 // To be implemented by the application
 void register_resources(void);
 void factory_presets_cb(size_t device_index, void *data);
+void lsm_change_cb(size_t device_index, oc_lsm_state_t current_state, void *data);
 void hostname_cb(size_t device_index, oc_string_t host_name, void *data);
 int app_set_serial_number(char *serial_number);
 int app_init(void);
@@ -181,6 +182,8 @@ static void ot_state_changed(uint32_t flags, void *context)
 			SNTP_Update();
 	}
 #endif /* USE_SNTP */
+
+	logic_role_changed();
 }
 
 static void signal_event_loop(void)
@@ -200,6 +203,16 @@ static void reset_cb(size_t device_index, int reset_value, void *data)
 	PRINT_APP("reset_cb()\n");
 
 	reset_embedded(device_index, reset_value, data);
+}
+
+void swu_start_update_cb_imp(size_t device_index, uint32_t start_time, void *data)
+{
+	ca_error status = CA_ERROR_FAIL;
+	PRINT_APP("swu_start_update_cb_imp(), device: %d, applying new sofware in %d\n", device_index, start_time);
+#if CASCODA_OTA_UPGRADE_ENABLED
+	status = ota_start_upgrade(start_time);
+	PRINT_APP("swu_start_update_cb_imp(), status = %d\n",status);
+#endif
 }
 
 /**
@@ -278,7 +291,7 @@ int main(void)
 				// Print the joiner credentials, delaying for up to 1 second
 				PlatformPrintJoinerCredentials(&dev, OT_INSTANCE, 0);
 
-				otErr = PlatformTryJoin(&dev, OT_INSTANCE);
+				otErr = PlatformTryJoinWithCustomPoll(&dev, OT_INSTANCE, &hardware_poll);
 				if (otErr == OT_ERROR_NONE || otErr == OT_ERROR_ALREADY)
 					break;
 				joinCooldownTimer = 0;
@@ -288,7 +301,7 @@ int main(void)
 				// Print the joiner credentials, delaying for up to 1 second
 				PlatformPrintJoinerCredentialsWithPskd(&dev, OT_INSTANCE, 0, thread_pw);
 
-				otErr = PlatformTryJoinWithPskd(&dev, OT_INSTANCE, thread_pw);
+				otErr = PlatformTryJoinWithPskdWithCustomPoll(&dev, OT_INSTANCE, thread_pw, &hardware_poll);
 				if (otErr == OT_ERROR_NONE || otErr == OT_ERROR_ALREADY)
 					break;
 				joinCooldownTimer = 0;
@@ -325,19 +338,18 @@ int main(void)
 
 	oc_storage_config("./knx_iot_creds");
 
-	/* configure the serial number */
 	uint8_t sn[6];
+	/* configure the serial number. must be done before stack initialization */
 	error = knx_get_stored_serial_number(sn);
 	if (error)
 	{
 		PRINT_APP("ERROR: Unique serial number not found! Using default value...\n");
 		PRINT_APP(
 			"Please create the data file using knx-gen-data and flash it with chilictl in order to fix this issue.\n");
-	}
-	else
-	{
+	} else {
 		// turn binary to hexadecimal
 		char serial_number_str[13];
+		// serial number in upper case
 		snprintf(serial_number_str,
 				 sizeof(serial_number_str),
 				 "%02X%02X%02X%02X%02X%02X",
@@ -349,7 +361,6 @@ int main(void)
 				 sn[5]);
 		app_set_serial_number(serial_number_str);
 	}
-
 #ifdef OC_SPAKE
 	char pwd[33];
 	error = knx_get_stored_password(pwd);
@@ -389,13 +400,26 @@ int main(void)
 	oc_set_hostname_cb(hostname_cb, NULL);
 	oc_set_reset_cb(reset_cb, NULL);
 	oc_set_factory_presets_cb(factory_presets_cb, NULL);
+	oc_set_lsm_change_cb(lsm_change_cb, NULL);
 #if CASCODA_OTA_UPGRADE_ENABLED
 	oc_set_swu_cb(swu_cb, (void *)"image_name");
+	oc_set_swu_startupdate_cb(swu_start_update_cb_imp, (void *)"image_name");
 #endif
 	oc_set_programming_mode_cb(prog_mode_cb, NULL);
 
 	/* start the stack */
 	init = oc_main_init(&handler);
+	
+	// configure the hostname.
+	// note: this method sets the SN part to uppercase, as that is how
+	// the serial number is stored in the oc_device_info_t
+	oc_device_info_t *device = oc_core_get_device_info(0);
+	char hostname_str[50];
+	memset(hostname_str, 0, 49);
+	strcat(hostname_str, "knx-");
+	strcat(hostname_str, oc_string(device->serialnumber));
+	strcat(hostname_str, ".local");
+	oc_core_set_device_hostname(0, hostname_str);
 
 	oc_set_max_app_data_size(1024);
 	oc_set_mtu_size(1232);

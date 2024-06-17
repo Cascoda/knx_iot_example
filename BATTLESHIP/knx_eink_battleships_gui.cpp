@@ -36,7 +36,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
-// 2024-06-17 16:16:29.293447
+// 2024-06-17 16:19:21.624451
 
 // For compilers that support precompilation, includes "wx/wx.h".
 #include <wx/wxprec.h>
@@ -51,7 +51,7 @@
 #endif
 
 #define NO_MAIN
-#include "knx_iot_example.h"
+#include "knx_eink_battleships.h"
 #include "api/oc_knx_dev.h"
 #include "api/oc_knx_sec.h"
 #include "api/oc_knx_fp.h"
@@ -76,9 +76,12 @@ enum
   CHECK_GRPID_DISPLAY = CHECK_IID_DISPLAY + 1, // grpid display check
   CHECK_SLEEPY = CHECK_GRPID_DISPLAY + 1 , // sleepy check
   CHECK_PM = CHECK_SLEEPY + 1 , // programming mode check in menu bar
-  DP_IDLED_1 = CHECK_PM + 1, // LED_1 for /p/o_1_1
-  DP_IDPB_1 = CHECK_PM + 2, // PB_1 for /p/o_2_2
-  DP_IDINFOONOFF_1 = CHECK_PM + 3 // InfoOnOff_1 for /p/o_3_3
+  DP_IDSENDSHOT = CHECK_PM + 1, // SendShot for /p/o_1_1
+  DP_IDRECEIVESHOT = CHECK_PM + 2, // ReceiveShot for /p/o_1_2
+  DP_IDSENDSHOTSTATUS = CHECK_PM + 3, // SendShotStatus for /p/o_1_3
+  DP_IDRECEIVESHOTSTATUS = CHECK_PM + 4, // ReceiveShotStatus for /p/o_1_4
+  DP_IDSENDREADY = CHECK_PM + 5, // SendReady for /p/o_1_5
+  DP_IDRECEIVEREADY = CHECK_PM + 6 // ReceiveReady for /p/o_1_6
 };
 
 static const wxCmdLineEntryDesc g_cmdLineDesc[] =
@@ -163,52 +166,128 @@ public:
 
     int x_width = 230; /* width of the widgets */
     int x_height = 25; /* height of the widgets */
-    int border_size = 1; /* border size, size between the widgets */
-  //DP_IDLED_1 bool if.a 
-  mLED_1 = new wxCheckBox(this, DP_IDLED_1, _T("LED_1 "), wxPoint(0, 0), wxSize(x_width, x_height)); 
-  mLED_1->Enable(false);
+    int border_size = 1; /* border size, size between the widgets */  
+  // complex data type, as string
+  char text_SENDSHOT[100];
+  memset(text_SENDSHOT, 0, 100);
+  app_str_expected_DPT_Uint_XY(2, text_SENDSHOT);
+  mSENDSHOT = new wxTextCtrl(this, DP_IDSENDSHOT, text_SENDSHOT, wxPoint(0, 0), wxSize(x_width, x_height), wxTE_PROCESS_ENTER);
+  char text_tt_SENDSHOT[100];
+  memset(text_tt_SENDSHOT, 0, 100);
+  app_str_expected_DPT_Uint_XY(1, text_tt_SENDSHOT);
+  mSENDSHOT->SetToolTip(text_tt_SENDSHOT);
+  mSENDSHOT->Enable(true);
   {
-    wxTextCtrl* lLED_1_text = new wxTextCtrl(this, -1, _T("LED_1 ('/p/o_1_1') "), wxPoint(0, 0), wxSize(x_width, x_height));
-    lLED_1_text->SetEditable(false);
-    lLED_1_text->SetToolTip("LED_1 urn:knx:dpt.switch ['urn:knx:dpa.417.61']  ");
+   
+    wxTextCtrl* lSENDSHOT_text = new wxTextCtrl(this, -1, _T("SendShot ('/p/o_1_1') if.o "), wxPoint(0, 0), wxSize(x_width, x_height));
+    lSENDSHOT_text->SetEditable(false);
+    lSENDSHOT_text->SetToolTip("SendShot urn:knx:dpt.uint_XY ['urn:knx:dpa.65500.101'] ");
+    // add sizer for the group.
+    wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
+    vsizer->Add(lSENDSHOT_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    vsizer->Add(mSENDSHOT, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    // add the sizer
+    sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  }
+  // add callback
+  mSENDSHOT->Bind(wxEVT_TEXT_ENTER, &ScrolledWidgetsPane::OnTextSENDSHOT, this);   
+  // complex data type, as string
+  char text_RECEIVESHOT[100];
+  memset(text_RECEIVESHOT, 0, 100);
+  app_str_expected_DPT_Uint_XY(2, text_RECEIVESHOT);
+  mRECEIVESHOT = new wxTextCtrl(this, DP_IDRECEIVESHOT, text_RECEIVESHOT, wxPoint(0, 0), wxSize(x_width, x_height), wxTE_PROCESS_ENTER);
+  char text_tt_RECEIVESHOT[100];
+  memset(text_tt_RECEIVESHOT, 0, 100);
+  app_str_expected_DPT_Uint_XY(1, text_tt_RECEIVESHOT);
+  mRECEIVESHOT->SetToolTip(text_tt_RECEIVESHOT);
+  mRECEIVESHOT->Enable(true);
+  {
+   
+    wxTextCtrl* lRECEIVESHOT_text = new wxTextCtrl(this, -1, _T("ReceiveShot ('/p/o_1_2') if.i "), wxPoint(0, 0), wxSize(x_width, x_height));
+    lRECEIVESHOT_text->SetEditable(false);
+    lRECEIVESHOT_text->SetToolTip("ReceiveShot urn:knx:dpt.uint_XY ['urn:knx:dpa.65501.111'] ");
+    // add sizer for the group.
+    wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
+    vsizer->Add(lRECEIVESHOT_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    vsizer->Add(mRECEIVESHOT, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    // add the sizer
+    sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  }   
+  // complex data type, as string
+  char text_SENDSHOTSTATUS[100];
+  memset(text_SENDSHOTSTATUS, 0, 100);
+  app_str_expected_DPT_Shot_Status(2, text_SENDSHOTSTATUS);
+  mSENDSHOTSTATUS = new wxTextCtrl(this, DP_IDSENDSHOTSTATUS, text_SENDSHOTSTATUS, wxPoint(0, 0), wxSize(x_width, x_height), wxTE_PROCESS_ENTER);
+  char text_tt_SENDSHOTSTATUS[100];
+  memset(text_tt_SENDSHOTSTATUS, 0, 100);
+  app_str_expected_DPT_Shot_Status(1, text_tt_SENDSHOTSTATUS);
+  mSENDSHOTSTATUS->SetToolTip(text_tt_SENDSHOTSTATUS);
+  mSENDSHOTSTATUS->Enable(true);
+  {
+   
+    wxTextCtrl* lSENDSHOTSTATUS_text = new wxTextCtrl(this, -1, _T("SendShotStatus ('/p/o_1_3') if.o "), wxPoint(0, 0), wxSize(x_width, x_height));
+    lSENDSHOTSTATUS_text->SetEditable(false);
+    lSENDSHOTSTATUS_text->SetToolTip("SendShotStatus urn:knx:dpt.shot_Status ['urn:knx:dpa.65501.102'] ");
+    // add sizer for the group.
+    wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
+    vsizer->Add(lSENDSHOTSTATUS_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    vsizer->Add(mSENDSHOTSTATUS, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    // add the sizer
+    sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  }
+  // add callback
+  mSENDSHOTSTATUS->Bind(wxEVT_TEXT_ENTER, &ScrolledWidgetsPane::OnTextSENDSHOTSTATUS, this);   
+  // complex data type, as string
+  char text_RECEIVESHOTSTATUS[100];
+  memset(text_RECEIVESHOTSTATUS, 0, 100);
+  app_str_expected_DPT_Shot_Status(2, text_RECEIVESHOTSTATUS);
+  mRECEIVESHOTSTATUS = new wxTextCtrl(this, DP_IDRECEIVESHOTSTATUS, text_RECEIVESHOTSTATUS, wxPoint(0, 0), wxSize(x_width, x_height), wxTE_PROCESS_ENTER);
+  char text_tt_RECEIVESHOTSTATUS[100];
+  memset(text_tt_RECEIVESHOTSTATUS, 0, 100);
+  app_str_expected_DPT_Shot_Status(1, text_tt_RECEIVESHOTSTATUS);
+  mRECEIVESHOTSTATUS->SetToolTip(text_tt_RECEIVESHOTSTATUS);
+  mRECEIVESHOTSTATUS->Enable(true);
+  {
+   
+    wxTextCtrl* lRECEIVESHOTSTATUS_text = new wxTextCtrl(this, -1, _T("ReceiveShotStatus ('/p/o_1_4') if.i "), wxPoint(0, 0), wxSize(x_width, x_height));
+    lRECEIVESHOTSTATUS_text->SetEditable(false);
+    lRECEIVESHOTSTATUS_text->SetToolTip("ReceiveShotStatus urn:knx:dpt.shot_Status ['urn:knx:dpa.65500.112'] ");
+    // add sizer for the group.
+    wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
+    vsizer->Add(lRECEIVESHOTSTATUS_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    vsizer->Add(mRECEIVESHOTSTATUS, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+    // add the sizer
+    sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+  } 
+  //DP_IDSENDREADY bool if.o
+  // if.o  ==> sensor == possible to change value in UI
+  mSENDREADY = new wxButton(this, DP_IDSENDREADY, _T("SendReady"), wxPoint(0, 0), wxSize(x_width, x_height)); 
+  mSENDREADY->Bind(wxEVT_BUTTON, &ScrolledWidgetsPane::OnPressedSendReady, this);
+  {
+    wxTextCtrl* lSENDREADY_text = new wxTextCtrl(this, -1, _T("SendReady ('/p/o_1_5')"), wxPoint(0, 0), wxSize(x_width, x_height));
+    lSENDREADY_text->SetEditable(false);
+    lSENDREADY_text->SetToolTip("SendReady urn:knx:dpt.start ['urn:knx:dpa.65500.103']  ");
     // add sizer for the group.
      wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
-     vsizer->Add(lLED_1_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
-     vsizer->Add(mLED_1, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
-     // add the sizer
-     sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
-  }          
-  //DP_IDPB_1 bool if.s
-  // if.s  ==> sensor == possible to change value in UI
-  mPB_1 = new wxButton(this, DP_IDPB_1, _T("PB_1"), wxPoint(0, 0), wxSize(x_width, x_height)); 
-  mPB_1->Bind(wxEVT_BUTTON, &ScrolledWidgetsPane::OnPressedPB_1, this);
-  {
-    wxTextCtrl* lPB_1_text = new wxTextCtrl(this, -1, _T("PB_1 ('/p/o_2_2')"), wxPoint(0, 0), wxSize(x_width, x_height));
-    lPB_1_text->SetEditable(false);
-    lPB_1_text->SetToolTip("PB_1 urn:knx:dpt.switch ['urn:knx:dpa.421.61']  ");
-    // add sizer for the group.
-     wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
-     vsizer->Add(lPB_1_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
-     vsizer->Add(mPB_1, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     vsizer->Add(lSENDREADY_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     vsizer->Add(mSENDREADY, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
      // add the sizer
      sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
   }           
-  //DP_IDINFOONOFF_1 bool if.s
-  // if.s  ==> sensor == possible to change value in UI
-  mINFOONOFF_1 = new wxButton(this, DP_IDINFOONOFF_1, _T("InfoOnOff_1"), wxPoint(0, 0), wxSize(x_width, x_height)); 
-  mINFOONOFF_1->Bind(wxEVT_BUTTON, &ScrolledWidgetsPane::OnPressedInfoOnOff_1, this);
+  //DP_IDRECEIVEREADY bool if.i 
+  mRECEIVEREADY = new wxCheckBox(this, DP_IDRECEIVEREADY, _T("ReceiveReady "), wxPoint(0, 0), wxSize(x_width, x_height)); 
+  mRECEIVEREADY->Enable(false);
   {
-    wxTextCtrl* lINFOONOFF_1_text = new wxTextCtrl(this, -1, _T("InfoOnOff_1 ('/p/o_3_3')"), wxPoint(0, 0), wxSize(x_width, x_height));
-    lINFOONOFF_1_text->SetEditable(false);
-    lINFOONOFF_1_text->SetToolTip("InfoOnOff_1 urn:knx:dpt.switch ['urn:knx:dpa.417.51']  ");
+    wxTextCtrl* lRECEIVEREADY_text = new wxTextCtrl(this, -1, _T("ReceiveReady ('/p/o_1_6') "), wxPoint(0, 0), wxSize(x_width, x_height));
+    lRECEIVEREADY_text->SetEditable(false);
+    lRECEIVEREADY_text->SetToolTip("ReceiveReady urn:knx:dpt.start ['urn:knx:dpa.65501.113']  ");
     // add sizer for the group.
      wxBoxSizer* vsizer = new wxBoxSizer(wxHORIZONTAL);
-     vsizer->Add(lINFOONOFF_1_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
-     vsizer->Add(mINFOONOFF_1, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     vsizer->Add(lRECEIVEREADY_text, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
+     vsizer->Add(mRECEIVEREADY, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
      // add the sizer
      sizer->Add(vsizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(border_size));
-  }
-  //mINFOONOFF_1->Enable(false);            
+  }          
 
     this->SetSizer(sizer);
     // this part makes the scrollbars show up
@@ -217,50 +296,114 @@ public:
   }
 
   //--------------------------
-  //--------------------------      
-  void OnPressedPB_1(wxCommandEvent& event); 
-  void OnPressedInfoOnOff_1(wxCommandEvent& event); 
-  //DP_IDLED_1 bool
-  wxCheckBox* mLED_1 ; // LED_1 if.a  
-  //DP_IDPB_1 bool
-  wxButton* mPB_1; // PB_1 if.s  
-  //DP_IDINFOONOFF_1 bool
-  wxButton* mINFOONOFF_1; // InfoOnOff_1 if.s  
-}; 
-void ScrolledWidgetsPane::OnPressedPB_1(wxCommandEvent& event)
+  //--------------------------
+  // complex datatype
+  void OnTextSENDSHOT(wxCommandEvent& event);    
+  // complex datatype
+  void OnTextSENDSHOTSTATUS(wxCommandEvent& event);        
+  void OnPressedSendReady(wxCommandEvent& event); 
+  //DP_IDSENDSHOT 
+  //type is complex! 
+  wxTextCtrl* mSENDSHOT; 
+  //DP_IDRECEIVESHOT 
+  //type is complex! 
+  wxTextCtrl* mRECEIVESHOT; 
+  //DP_IDSENDSHOTSTATUS 
+  //type is complex! 
+  wxTextCtrl* mSENDSHOTSTATUS; 
+  //DP_IDRECEIVESHOTSTATUS 
+  //type is complex! 
+  wxTextCtrl* mRECEIVESHOTSTATUS; 
+  //DP_IDSENDREADY bool
+  wxButton* mSENDREADY; // SendReady if.o  
+  //DP_IDRECEIVEREADY bool
+  wxCheckBox* mRECEIVEREADY ; // ReceiveReady if.i  
+};    
+void ScrolledWidgetsPane::OnPressedSendReady(wxCommandEvent& event)
 {
-  char url[] = "/p/o_2_2";
+  char url[] = "/p/o_1_5";
   char my_text[100];
-  bool p = (bool)*app_get_DPT_Switch_variable(url, NULL);
+  bool p = (bool)*app_get_DPT_Start_variable(url, NULL);
   if (p == true) {
     p = false;
   }
   else {
     p = true;
   }
-  app_set_DPT_Switch_variable(url, (DPT_Switch*)&p);
+  app_set_DPT_Start_variable(url, (DPT_Start*)&p);
   oc_do_s_mode_with_scope(2, url, "w");
   oc_do_s_mode_with_scope(5, url, "w");
-  sprintf(my_text, "PB_1 ('%s') pressed: %d", url, (int)p);
+  sprintf(my_text, "SendReady ('%s') pressed: %d", url, (int)p);
   this->m_parentFrame->SetStatusText(my_text);
-}  
-void ScrolledWidgetsPane::OnPressedInfoOnOff_1(wxCommandEvent& event)
+}   
+// Complex datatype for SendShot
+void ScrolledWidgetsPane::OnTextSENDSHOT(wxCommandEvent& event)
 {
-  char url[] = "/p/o_3_3";
-  char my_text[100];
-  bool p = (bool)*app_get_DPT_Switch_variable(url, NULL);
-  if (p == true) {
-    p = false;
+  char url[] = "/p/o_1_1";
+  char my_text[200];
+  bool input_ok = true;
+  DPT_Uint_XY dt_converted;
+  
+  sprintf(my_text, "invalid text ");
+  wxString entered_str = mSENDSHOT->GetValue();
+  wxCharBuffer buffer = entered_str.ToUTF8();
+  char* text_as_char = buffer.data();
+  int error = app_sscanf_DPT_Uint_XY(&dt_converted, text_as_char);
+  if ( error == 0 ){
+    if (input_ok) {
+      // send out the message
+      //dt_converted = (DPT_Uint_XY)converted;
+      app_set_DPT_Uint_XY_variable(url, &dt_converted);
+      oc_do_s_mode_with_scope(2, url, "w");
+      oc_do_s_mode_with_scope(5, url, "w");
+      sprintf(my_text, "Sensor SendShot (/p/o_1_1) ::  %s ", text_as_char);
+    }
+  } else {
+    char txt[100];
+    memset(txt, 0, 100);
+    app_str_expected_DPT_Uint_XY(1, txt);
+    strcat(my_text, " expected format: ");
+    strcat(my_text, txt);
   }
-  else {
-    p = true;
-  }
-  app_set_DPT_Switch_variable(url, (DPT_Switch*)&p);
-  oc_do_s_mode_with_scope(2, url, "w");
-  oc_do_s_mode_with_scope(5, url, "w");
-  sprintf(my_text, "InfoOnOff_1 ('%s') pressed: %d", url, (int)p);
   this->m_parentFrame->SetStatusText(my_text);
-}     
+}
+  
+   
+ 
+// Complex datatype for SendShotStatus
+void ScrolledWidgetsPane::OnTextSENDSHOTSTATUS(wxCommandEvent& event)
+{
+  char url[] = "/p/o_1_3";
+  char my_text[200];
+  bool input_ok = true;
+  DPT_Shot_Status dt_converted;
+  
+  sprintf(my_text, "invalid text ");
+  wxString entered_str = mSENDSHOTSTATUS->GetValue();
+  wxCharBuffer buffer = entered_str.ToUTF8();
+  char* text_as_char = buffer.data();
+  int error = app_sscanf_DPT_Shot_Status(&dt_converted, text_as_char);
+  if ( error == 0 ){
+    if (input_ok) {
+      // send out the message
+      //dt_converted = (DPT_Shot_Status)converted;
+      app_set_DPT_Shot_Status_variable(url, &dt_converted);
+      oc_do_s_mode_with_scope(2, url, "w");
+      oc_do_s_mode_with_scope(5, url, "w");
+      sprintf(my_text, "Sensor SendShotStatus (/p/o_1_3) ::  %s ", text_as_char);
+    }
+  } else {
+    char txt[100];
+    memset(txt, 0, 100);
+    app_str_expected_DPT_Shot_Status(1, txt);
+    strcat(my_text, " expected format: ");
+    strcat(my_text, txt);
+  }
+  this->m_parentFrame->SetStatusText(my_text);
+}
+  
+   
+   
 
 //----------------------------------------------------
 //----------------------------------------------------
@@ -346,12 +489,13 @@ bool MyApp::OnInit()
  * @param str_serial_number 
  */
 MyFrame::MyFrame(char* str_serial_number)
-    : wxFrame(NULL, wxID_ANY, "KNX Switching example")
+    : wxFrame(NULL, wxID_ANY, "KNX Battleships Demo")
 {
   m_menuFile = new wxMenu;
   m_menuFile->Append(GOT_TABLE_ID, "List Group Object Table", "List the Group object table", false);
   m_menuFile->Append(PUB_TABLE_ID, "List Publisher Table", "List the Publisher table", false);
   m_menuFile->Append(REC_TABLE_ID, "List Recipient Table", "List the Recipient table", false);
+  m_menuFile->Append(PARAMETER_LIST_ID, "List Parameters", "List the parameters of the device", false);
   m_menuFile->Append(AT_TABLE_ID, "List Auth/AT Table", "List the security data of the device", false);
   m_menuFile->Append(CHECK_PM, "Programming Mode", "Sets the application in programming mode", true);
   m_menuFile->Append(RESET_TABLE, "Reset (7) (Tables)", "Reset 7 (Reset to default without IA).", false);
@@ -382,7 +526,7 @@ MyFrame::MyFrame(char* str_serial_number)
   menuBar->Append(menuHelp, "&Help");
   SetMenuBar( menuBar );
   CreateStatusBar();
-  SetStatusText("Welcome to KNX Switching example!");
+  SetStatusText("Welcome to KNX Battleships Demo!");
   Bind(wxEVT_MENU, &MyFrame::OnReset, this, RESET);
   Bind(wxEVT_MENU, &MyFrame::OnClearTables, this, RESET_TABLE);
   Bind(wxEVT_MENU, &MyFrame::OnGroupObjectTable, this, GOT_TABLE_ID);
@@ -397,8 +541,8 @@ MyFrame::MyFrame(char* str_serial_number)
   Bind(wxEVT_MENU, &MyFrame::OnExit, this, wxID_EXIT);
   int x_width = 350; /* width of the widgets */
   int x_height = 25; /* height of the widgets */
-  int max_instances = 1; // might not work with modules
-  int max_dp_count = 3;
+  int max_instances = 6;
+  int max_dp_count = 6;
   int border_size = 1;
   wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
   
@@ -844,7 +988,7 @@ void MyFrame::OnRecipientTable(wxCommandEvent& event)
 void MyFrame::OnParameterList(wxCommandEvent& event)
 {
   int device_index = 0;
-  char text[1024 + (200*0)];
+  char text[1024 + (200*1)];
   char line[200];
   char windowtext[200];
 
@@ -876,23 +1020,82 @@ void MyFrame::OnParameterList(wxCommandEvent& event)
       strcat(text, line);
     }
     added = false;
-    if (app_is_DPT_Switch_url(url)) {
-      DPT_Switch param_value;
+    if (app_is_DPT_Param_Bool_url(url)) {
+      DPT_Param_Bool param_value;
       memset(&param_value, 0, sizeof(param_value));
-      app_get_DPT_Switch_variable(url, &param_value);
+      app_get_DPT_Param_Bool_variable(url, &param_value);
+      added = true;
+
+      // Enumeration
+      sprintf(line, "  value : '%d'  ", param_value);
+      strcat(text, line);
+    }
+    if (app_is_DPT_Shot_Status_url(url)) {
+      DPT_Shot_Status param_value;
+      memset(&param_value, 0, sizeof(param_value));
+      app_get_DPT_Shot_Status_variable(url, &param_value);
+      added = true;
+
+
+      // param_value.DPST_60004_1_F_1 of bool type
+      sprintf(line, "  %s : '%d'  ", "DPST-60004-1_F-1", param_value.DPST_60004_1_F_1);
+      strcat(text, line);
+      if (!param_value.DPST_60004_1_F_1) {
+        sprintf(line, " (%s) ", "Miss");
+        strcat(text, line);
+      }
+      if (param_value.DPST_60004_1_F_1) {
+        sprintf(line, " (%s) ", "Hit");
+        strcat(text, line);
+      }
+
+      // param_value.DPST_60004_1_F_2 of bool type
+      sprintf(line, "  %s : '%d'  ", "DPST-60004-1_F-2", param_value.DPST_60004_1_F_2);
+      strcat(text, line);
+      if (!param_value.DPST_60004_1_F_2) {
+        sprintf(line, " (%s) ", "Floating");
+        strcat(text, line);
+      }
+      if (param_value.DPST_60004_1_F_2) {
+        sprintf(line, " (%s) ", "Sunk");
+        strcat(text, line);
+      }
+      strcat(text, "\n");
+
+      // param_value.DPST_60004_1_F_3 of Enumeration type
+    }
+    if (app_is_DPT_Start_url(url)) {
+      DPT_Start param_value;
+      memset(&param_value, 0, sizeof(param_value));
+      app_get_DPT_Start_variable(url, &param_value);
       added = true;
 
       // bool
       sprintf(line, "  value : '%d'  ", param_value);
       strcat(text, line);
       if (!param_value) {
-        sprintf(line, " (%s) ", "Off");
+        sprintf(line, " (%s) ", "Stop");
         strcat(text, line);
       }
       if (param_value) {
-        sprintf(line, " (%s) ", "On");
+        sprintf(line, " (%s) ", "Start");
         strcat(text, line);
       }
+    }
+    if (app_is_DPT_Uint_XY_url(url)) {
+      DPT_Uint_XY param_value;
+      memset(&param_value, 0, sizeof(param_value));
+      app_get_DPT_Uint_XY_variable(url, &param_value);
+      added = true;
+
+      // param_value.DPST_60009_1_F_1 of unsigned int type
+      sprintf(line, "  %s : '%d'  ", "DPST-60009-1_F-1", param_value.DPST_60009_1_F_1);
+      strcat(text, line);
+      strcat(text, "\n");
+
+      // param_value.DPST_60009_1_F_2 of unsigned int type
+      sprintf(line, "  %s : '%d'  ", "DPST-60009-1_F-2", param_value.DPST_60009_1_F_2);
+      strcat(text, line);
     }
 
     if (added == false) {
@@ -1049,26 +1252,29 @@ void MyFrame::OnAuthTable(wxCommandEvent& event)
  */
 void MyFrame::OnAbout(wxCommandEvent& event)
 {
-  char text[500 + (200* 3)];
-  strcpy(text, "KNX Switching example\n");
+  char text[500 + (200* 6)];
+  strcpy(text, "KNX Battleships Demo\n");
   strcat(text, "\nDevice Serial Number: ");
   oc_device_info_t* device = oc_core_get_device_info(0);
   strcat(text, oc_string(device->serialnumber));
   strcat(text,"\n");
   strcat(text,"manufacturer     : cascoda\n");
-  strcat(text,"model            : dev board example\n");
+  strcat(text,"model            : KNX Battleships Demo eink\n");
   strcat(text,"hardware type    : 000000000000\n");
   strcat(text,"hardware version : [0, 4, 0]\n");
   strcat(text,"firmware version : [0, 4, 0]\n\n");
   
   strcat(text, "data points:\n");
-  strcat(text,"url:/p/o_1_1 rt:urn:knx:dpa.417.61 if:if.a inst:1 name:LED_1\n");
-  strcat(text,"url:/p/o_2_2 rt:urn:knx:dpa.421.61 if:if.s inst:1 name:PB_1\n");
-  strcat(text,"url:/p/o_3_3 rt:urn:knx:dpa.417.51 if:if.s inst:1 name:InfoOnOff_1\n");
+  strcat(text,"url:/p/o_1_1 rt:urn:knx:dpa.65500.101 if:if.o inst:1 name:SendShot\n");
+  strcat(text,"url:/p/o_1_2 rt:urn:knx:dpa.65501.111 if:if.i inst:1 name:ReceiveShot\n");
+  strcat(text,"url:/p/o_1_3 rt:urn:knx:dpa.65501.102 if:if.o inst:1 name:SendShotStatus\n");
+  strcat(text,"url:/p/o_1_4 rt:urn:knx:dpa.65500.112 if:if.i inst:1 name:ReceiveShotStatus\n");
+  strcat(text,"url:/p/o_1_5 rt:urn:knx:dpa.65500.103 if:if.o inst:1 name:SendReady\n");
+  strcat(text,"url:/p/o_1_6 rt:urn:knx:dpa.65501.113 if:if.i inst:1 name:ReceiveReady\n");
   strcat(text, "\n");
   
   strcat(text, "(c) Cascoda Ltd\n");
-  strcat(text, "2024-06-17 16:16:29.293447");
+  strcat(text, "2024-06-17 16:19:21.624451");
   CustomDialog("About", text);
 }
 
@@ -1123,9 +1329,9 @@ void MyFrame::OnTimer(wxTimerEvent& event)
  */
 void  MyFrame::updateInfoCheckBoxes()
 {
-  bool p;
-  p = *app_get_DPT_Switch_variable("/p/o_1_1", NULL); // set toggle of LED_1
-  m_scrolledwindow->mLED_1->SetValue(p);   
+  bool p;     
+  p = *app_get_DPT_Start_variable("/p/o_1_6", NULL); // set toggle of ReceiveReady
+  m_scrolledwindow->mRECEIVEREADY->SetValue(p); 
 
 }
 
@@ -1291,12 +1497,28 @@ void  MyFrame::updateInfoButtons()
   int p_int;
   float f;
   double d;
-  // name=LED_1 dpt=urn:knx:dpt.switch if=if.a ctype=bool
-  p = (bool)*app_get_DPT_Switch_variable(URL_LED_1, NULL);  
-  // set text of LED_1
+  // name=ReceiveShot dpt=urn:knx:dpt.uint_XY if=if.i ctype= 
+  {
+    const DPT_Uint_XY* d = (const DPT_Uint_XY *)app_get_DPT_Uint_XY_variable(URL_RECEIVESHOT, NULL);
+    // set text of ReceiveShot
+    strcpy(text, "");
+    app_sprintf_DPT_Uint_XY(d, text, 200);
+    m_scrolledwindow->mRECEIVESHOT->SetLabel(text); 
+  }
+  // name=ReceiveShotStatus dpt=urn:knx:dpt.shot_Status if=if.i ctype= 
+  {
+    const DPT_Shot_Status* d = (const DPT_Shot_Status *)app_get_DPT_Shot_Status_variable(URL_RECEIVESHOTSTATUS, NULL);
+    // set text of ReceiveShotStatus
+    strcpy(text, "");
+    app_sprintf_DPT_Shot_Status(d, text, 200);
+    m_scrolledwindow->mRECEIVESHOTSTATUS->SetLabel(text); 
+  }
+  // name=ReceiveReady dpt=urn:knx:dpt.start if=if.i ctype=bool
+  p = (bool)*app_get_DPT_Start_variable(URL_RECEIVEREADY, NULL);  
+  // set text of ReceiveReady
   strcpy(text, "");
   this->bool2text(p, text);
-  m_scrolledwindow->mLED_1->SetLabel(text); 
+  m_scrolledwindow->mRECEIVEREADY->SetLabel(text); 
 
 }
 

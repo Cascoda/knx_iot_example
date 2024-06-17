@@ -1,6 +1,6 @@
 /*
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
- Copyright (c) 2022-2023 Cascoda Ltd
+ Copyright (c) 2022-2024 Cascoda Ltd
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  * All rights reserved.
  *
@@ -116,6 +116,9 @@ static struct timespec ts;
 #endif
 
 #include <stdio.h> /* defines FILENAME_MAX */
+#include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
 #define STORE_PREFIX "app"
 
 #define MY_NAME "KNX Switching example" /**< The name of the application */
@@ -145,7 +148,6 @@ char g_serial_number[20] = "00FA10010710";
 
 
 
-
 volatile DPT_Switch gLED_1;   /**< global variable for LED_1 */
 volatile DPT_Switch gPB_1;   /**< global variable for PB_1 */
 volatile DPT_Switch gInfoOnOff_1;   /**< global variable for InfoOnOff_1 */
@@ -153,29 +155,20 @@ volatile DPT_Switch gInfoOnOff_1;   /**< global variable for InfoOnOff_1 */
 volatile bool g_faultLED_1;   /**< global variable for fault LED_1 */
 
 
-
-
 void
 get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data);
 void
-put_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data);
-
-
-const char *const mdLED_1[3] = {
+put_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data);const char *const mdLED_1[3] = {
   "desc", "On/Off switch 1", 
   NULL
-}; 
-const char *const mdPB_1[3] = {
+}; const char *const mdPB_1[3] = {
   "desc", "On/Off push button 1", 
   NULL
-}; 
-const char *const mdInfoOnOff_1[3] = {
+}; const char *const mdInfoOnOff_1[3] = {
   "desc", "Feedback 1", 
   NULL
 };  
-
-const size_t num_datapoints = 3; 
- 
+const size_t num_datapoints = 3; /** number of data points */ 
 
 oc_resource_dummy_t app_resource_end = {NULL, -1};
 oc_resource_data_t runtime_dataLED_1;
@@ -189,8 +182,9 @@ _Pragma("GCC diagnostic push")
 _Pragma("GCC diagnostic ignored \"-Wdiscarded-array-qualifiers\"")
 #endif
 
+
 const datapoint_t g_datapoints[3] = {
-  /*[0] = */{
+  /*[0] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[1].resource,
       /*device*/ 0,
@@ -198,7 +192,7 @@ const datapoint_t g_datapoints[3] = {
       /*uri*/ oc_string_create_const("/p/o_1_1"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.61" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.switch"),
-      /*interfaces*/ OC_IF_A,
+      /*interfaces*/ OC_IF_D | OC_IF_A,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[0]},
@@ -221,7 +215,7 @@ const datapoint_t g_datapoints[3] = {
     /*.default_present =*/ false,
     /*.num_elements =*/ 0
   },
-  /*[1] = */{
+  /*[1] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[2].resource,
       /*device*/ 0,
@@ -229,7 +223,7 @@ const datapoint_t g_datapoints[3] = {
       /*uri*/ oc_string_create_const("/p/o_2_2"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.421.61" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.switch"),
-      /*interfaces*/ OC_IF_S,
+      /*interfaces*/ OC_IF_D | OC_IF_S,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[1]},
@@ -252,7 +246,7 @@ const datapoint_t g_datapoints[3] = {
     /*.default_present =*/ false,
     /*.num_elements =*/ 0
   },
-  /*[2] = */{
+  /*[2] (saved=0)= */{
     /* .resource=*/ { 
       /*next*/(oc_resource_t*)&app_resource_end,
       /*device*/ 0,
@@ -260,7 +254,7 @@ const datapoint_t g_datapoints[3] = {
       /*uri*/ oc_string_create_const("/p/o_3_3"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.51" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.switch"),
-      /*interfaces*/ OC_IF_S,
+      /*interfaces*/ OC_IF_D | OC_IF_S,
       /*content_type*/ APPLICATION_CBOR,
       /*properties*/ OC_DISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_datapoints[2]},
@@ -284,7 +278,18 @@ const datapoint_t g_datapoints[3] = {
     /*.num_elements =*/ 0
   }, 
 }; 
- 
+     
+/* 
+  total saved parameters/datapoints = 0
+  total group object entries        = 
+  total publisher entries           = 
+  total receiver entries            = 
+  total auth entries                = 
+  total SSN entries                 = 
+  ---------------------------------------- +
+  total files                       = 100
+*/
+
 
 #if defined _MSC_VER && !defined __INTEL_COMPILER
 _Pragma("warning(default:4090)")
@@ -299,7 +304,7 @@ typedef void (*app_set_default_value_fn)(const char*);
 typedef void (*app_set_variable_fn)(const char*, const void*);
 typedef void (*app_set_array_fn)(const char*, const void*, int n, bool store_persistently);
 typedef void (*app_set_array_elems_fn)(const char*, const void*, int start, int n, bool store_persistently);
-typedef void (*oc_encode_fn)(const void*);
+typedef void (*oc_encode_fn)(const void*, bool is_metadata);
 typedef void (*oc_encode_array_fn)(const void*, int n);
 typedef void (*oc_encode_array_fn)(const void*, int n);
 typedef bool (*oc_parse_fn)(oc_rep_t *rep, void *out);
@@ -330,7 +335,7 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
   {sizeof(float)},
   {sizeof(char*)},
   {
-    sizeof(DPT_Switch),
+    sizeof(DPT_Switch),   // DPT_Switch DPT_Switch
     (app_get_variable_fn)app_get_DPT_Switch_variable,
     (app_get_array_fn)app_get_DPT_Switch_array,
     (app_get_array_elems_fn)app_get_DPT_Switch_array_elems,
@@ -376,7 +381,7 @@ static const char *const *get_datapoint_metadata(const datapoint_t *dp) {
   return dp->metadata;
 }
 
-static bool oc_encode_datapoint(const datapoint_t *dp, int pn, int ps) {
+static bool oc_encode_datapoint(const datapoint_t *dp, int pn, int ps, bool is_metadata) {
   size_t count = dp->num_elements;
   const struct datapoint_type_t *dpt = &g_datapoint_types[dp->type];
   int n = ps;
@@ -398,7 +403,7 @@ static bool oc_encode_datapoint(const datapoint_t *dp, int pn, int ps) {
   if (ps > 1) 
     g_datapoint_types[dp->type].oc_encode_array(var, n);
   else 
-    g_datapoint_types[dp->type].oc_encode(var);
+    g_datapoint_types[dp->type].oc_encode(var, is_metadata);
   
   free(var);
   return true;
@@ -420,7 +425,7 @@ static bool oc_parse_datapoint(const datapoint_t *dp, oc_rep_t *rep, void *out, 
   } 
 }
 
-static void datapoint_set(const datapoint_t *dp, void *in, int start, int n) 
+void datapoint_set(const datapoint_t *dp, void *in, int start, int n) 
 {
   if (in == NULL)
     return;
@@ -436,12 +441,21 @@ static void datapoint_set(const datapoint_t *dp, void *in, int start, int n)
 const datapoint_t *get_datapoint_by_url(const char *url) {
   //this can likely be optimised in the future for speed
   //with a binary search or similar
+  
+  bool is_param = false;
+  if (strncmp(url,"/p/p",4) == 0) {
+    is_param = true;
+  }
+  
 
-  for(int i = 0; i < num_datapoints; i++) {
-    const datapoint_t *it = &g_datapoints[i];
-    const char *_url = get_datapoint_url(it);
-    if (strcmp(_url, url) == 0) {
-      return it;
+  if (is_param == false) {
+    for(int i = 0; i < num_datapoints; i++) {
+      const datapoint_t *it = &g_datapoints[i];
+      const char *_url = get_datapoint_url(it);
+      // it always start with /p/<url>
+      if (strcmp((char *)&_url[3], (char *)&url[3]) == 0) {
+        return it;
+      }
     }
   } 
  
@@ -454,6 +468,41 @@ int app_get_url_array_size(const char *url)
   if (dp == NULL)
     return -1;
   return dp->num_elements;
+}
+
+bool get_module_url(char* out_url, const char* in_url, int module_index)
+{
+  int digits_after_underscore = 0;
+  size_t url_length = strlen(in_url);
+  size_t keep_len;
+  char temp[50];
+      
+  // Find out how many more digits we have after the underscore
+  for (int i = url_length - 1; i >= 0; --i)
+  {
+      // We have reached the underscore, we can stop counting
+      if (*(in_url + i) == '_')
+          break; 
+          
+      // We have counted one more digit after the underscore
+      if (isdigit(*(in_url + i)))
+          ++digits_after_underscore;
+      else // We have encountered a non-digit and non-underscore, which is unexpected.
+          return true; 
+  }
+  
+  // We can now calculate the number of characters that we need to keep from the original URL
+  keep_len = url_length - digits_after_underscore;
+  
+  // Copy over those characters into a temp array
+  strncpy(temp, in_url, keep_len);
+  temp[keep_len] = '\0';
+  
+  // Add the module number at the end, and set the out_url pointer
+  sprintf(temp + strlen(temp), "%d", module_index);
+  strcpy(out_url, temp);
+  
+  return false;
 }
 
 // Getters/Setters for DPT_Switch
@@ -574,7 +623,6 @@ bool oc_parse_DPT_Switch_single(oc_rep_t *rep, DPT_Switch *out)
   // todo Fix void
    bool ret = oc_rep_i_get_bool(rep, 1, (void*)out);
   
- 
   return ret;
 }
 
@@ -619,14 +667,18 @@ void oc_encode_DPT_Switch_single(CborEncoder *parent, const DPT_Switch *in)
   cbor_encode_boolean(parent, (bool)*in);
 }
 
-void oc_encode_DPT_Switch(const DPT_Switch *in)
+void oc_encode_DPT_Switch(const DPT_Switch *in, bool is_metadata)
 {
   if (in == NULL) {
     return;
   }
-  oc_rep_begin_root_object();
+  if (!is_metadata) { // Don't begin & end root object as it's already done during metadata handling
+    oc_rep_begin_root_object();
+  }
   oc_encode_DPT_Switch_single(oc_rep_object(root), in);
-  oc_rep_end_root_object();
+  if (!is_metadata) {
+    oc_rep_end_root_object();
+  }
 }
 
 void oc_encode_DPT_Switch_array(const DPT_Switch *in, int n)
@@ -654,13 +706,18 @@ void persistent_store_DPT_Switch_array(const char *name, const DPT_Switch *in, i
   long ret;
   const size_t max_size = 4 * n + 2;
   rep_buf = malloc(max_size);
-  char store_name[32] = STORE_PREFIX;
+#ifdef OPTIMIZE_STORAGE
+// use input as storage name with "/p/" prefix removed
+ const char* store_name = (char *)&name[3];
+#else
+    char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/');
   while(pos) {
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
 
   oc_rep_new(rep_buf, max_size);
   oc_encode_DPT_Switch_array(in, n);
@@ -676,9 +733,9 @@ void persistent_store_DPT_Switch_array(const char *name, const DPT_Switch *in, i
     PRINT_APP("Error encoding DPT_Switch %s for storage\n", name);
   }
 
-  if (ret <= 0)
+  if (ret <= 0) {
     PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
-
+  }
   free(rep_buf);
 }
 
@@ -692,6 +749,10 @@ bool persistent_load_DPT_Switch_array(const char *name, DPT_Switch *out, int n)
   oc_rep_t *rep = NULL;
   int max_size = 4 * n + 2;
   uint8_t *oc_storage_buf;
+#ifdef OPTIMIZE_STORAGE
+ // use input as storage name with "/p/" prefix removed
+  const char* store_name = (char *)&name[3];
+#else
   char store_name[32] = STORE_PREFIX;
   strcat(store_name, name);
   char *pos = strchr(store_name, '/'); 
@@ -699,10 +760,12 @@ bool persistent_load_DPT_Switch_array(const char *name, DPT_Switch *out, int n)
     *pos = '_';
     pos = strchr(store_name, '/');
   }
+#endif
   long ret;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
   oc_storage_buf = malloc(max_size);
+  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
@@ -728,6 +791,7 @@ err:
   if(error) {
     oc_storage_erase(name);
   }
+  oc_rep_set_pool(prev_rep_obj);
   return !error;
 }
 
@@ -750,8 +814,7 @@ int app_sscanf_DPT_Switch(DPT_Switch *in, char* text)
   const char s[2] = " ";
   char *token;
   
-  if (text == NULL)
-  {
+  if (text == NULL) {
     return 1;
   }
   memset(temp_string, 0, 300);
@@ -773,19 +836,16 @@ int app_sscanf_DPT_Switch(DPT_Switch *in, char* text)
 
 int app_str_expected_DPT_Switch(int select, char* text)
 {
-  if (text == NULL)
-  {
+  if (text == NULL) {
     return 1;
   }
-  if (select == 1)
-  {
+  if (select == 1) {
   // bool
     strcat(text, " %d");
     return 0;
   }
   
-  if (select == 2)
-  {
+  if (select == 2) {
     strcat(text, " 0");
     return 0;
   }
@@ -926,6 +986,11 @@ bool app_retrieve_fault_variable(const char* url)
 
 bool app_is_url_parameter(const char* url)
 {
+  // all parametes start with /p/pxxx
+  if (strncmp(url,"/p/p",4) == 0 ) {
+    return false;
+  }
+
    
   return false;
 }
@@ -1058,11 +1123,11 @@ oc_add_s_mode_response_cb(char *url, oc_rep_t *rep, oc_rep_t *rep_value)
  *
  */
 void app_str_to_upper(char *str){
-    while (*str != '\0')
-    {
-        *str = toupper(*str);
-        str++;
-    }
+  while (*str != '\0')
+  {
+    *str = toupper(*str);
+    str++;
+  }
 }
 
 /**
@@ -1075,7 +1140,7 @@ void app_str_to_upper(char *str){
  * - knx spec version
  * - hardware version : [0, 4, 0]
  * - firmware version : [0, 4, 0]
- * - hardware type    : 000001
+ * - hardware type    : 000000000000
  * - device model     : dev board example
  *
  */
@@ -1090,6 +1155,25 @@ app_init(void)
 
   oc_device_info_t *device = oc_core_get_device_info(0);
 
+#ifdef LINUX
+  #define MAX_HOSTNAME 50
+  char hostname[50];
+  // set the hostname
+  ret = gethostname(&hostname[0], 50);
+  if (ret != -1) {
+    printf("Hostname (linux):    %s\n", hostname);
+    oc_core_set_device_hostname(0, hostname);
+  }
+#endif
+#ifdef WIN32
+  char hostname_str[50];
+  int error = gethostname(hostname_str, 50);
+  if (error == 0) {
+    printf("Hostname (win32):    %s\n", hostname_str);
+    oc_core_set_device_hostname(0, hostname_str);
+  }
+#endif
+
   
   /* set the hardware version 0.4.0 */
   oc_core_set_device_hwv(0, 0, 4, 0);
@@ -1099,12 +1183,10 @@ app_init(void)
   oc_core_set_device_fwv(0, 0, 4, 0);
   
   
-  /* manufactorer id */
+  /* manufacturer id */
   oc_core_set_device_mid(0, 0x00FA);
-
   /* set the hardware type*/
-  oc_core_set_device_hwt(0, "003030303030");
-
+  oc_core_set_device_hwt(0, "000000000000");
   /* set the model */
   oc_core_set_device_model(0, "dev board example");
 
@@ -1143,8 +1225,9 @@ bool request_query_get_int(oc_request_t *request, const char *query, int *out)
   char *query_str;
   
   int query_len = oc_get_query_value(request, query, &query_str);
-  if(query_len <= 0)
+  if(query_len <= 0) {
     return false;
+  }
   char buf[16];
   strncpy(buf, query_str, query_len);
   *out = atoi(buf);
@@ -1203,7 +1286,7 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
         if ((strncmp(m, "value", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
           m_valid = true;
-          if (oc_encode_datapoint(dp, pn, ps) == false) {
+          if (oc_encode_datapoint(dp, pn, ps, true) == false) {
             oc_send_response_no_format(request, OC_STATUS_INTERNAL_SERVER_ERROR);
             goto done;
           }
@@ -1228,7 +1311,7 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
         if ((strncmp(m, "rt", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
           m_valid = true;
-          char *dpa = get_datapoint_dpa(dp);
+          const char *dpa = get_datapoint_dpa(dp);
           if (dpa)
             oc_rep_set_text_string(root, rt, &dpa[7]);
         }
@@ -1255,10 +1338,10 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
           m_valid = true;
           int index = oc_core_find_group_object_table_url(oc_string(request->resource->uri));
           if (index > -1) {
-             oc_group_object_table_t* got_table_entry = oc_core_get_group_object_table_entry(index);
-             if (got_table_entry) {
+            oc_group_object_table_t* got_table_entry = oc_core_get_group_object_table_entry(index);
+            if (got_table_entry) {
                oc_rep_set_int_array(root, ga, got_table_entry->ga, got_table_entry->ga_len);
-             }
+            }
           }
         }
         for (const char *const *md = get_datapoint_metadata(dp); md && *md; md+=2) {
@@ -1283,7 +1366,7 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
     oc_send_cbor_response(request, OC_STATUS_OK);
     goto done;
   }
-  if (oc_encode_datapoint(dp, pn, ps) == false) {
+  if (oc_encode_datapoint(dp, pn, ps, false) == false) {
     oc_send_response_no_format(request, OC_STATUS_INTERNAL_SERVER_ERROR);
     goto done;
   }
@@ -1335,19 +1418,24 @@ put_generic(oc_request_t *request, oc_interface_mask_t interfaces,
   error_state = !oc_parse_datapoint(dp, rep, new_value, ps);
 
   if (error_state == false){
-      oc_send_response_no_format(request, OC_STATUS_CHANGED);
-      datapoint_set(dp, new_value, pn*ps, ps);
-      if (dp->feedback_url) {
-        //check types match
-        const datapoint_t *feedback = get_datapoint_by_url(dp->feedback_url);
-        if (feedback->type == dp->type && feedback->num_elements == dp->num_elements) {
-          datapoint_set(feedback, new_value, pn*ps, ps);
-          PRINT("  Send status to '%s' with flag: 'w'\n", get_datapoint_url(feedback));
-          oc_do_s_mode_with_scope(5, dp->feedback_url, "w");
-        }
-      }
+    const oc_resource_t *my_resource =
+    oc_ri_get_app_resource_by_uri(request->uri_path, strlen(request->uri_path), 0);
+    if (my_resource != NULL)
+      oc_notify_observers(my_resource);
 
-      do_put_cb(get_datapoint_url(dp));
+    oc_send_response_no_format(request, OC_STATUS_CHANGED);
+    datapoint_set(dp, new_value, pn*ps, ps);
+    if (dp->feedback_url) {
+      //check types match
+      const datapoint_t *feedback = get_datapoint_by_url(dp->feedback_url);
+      if (feedback->type == dp->type && feedback->num_elements == dp->num_elements) {
+        datapoint_set(feedback, new_value, pn*ps, ps);
+        PRINT("  Send status to '%s' with flag: 'w'\n", get_datapoint_url(feedback));
+        oc_do_s_mode_with_scope(5, dp->feedback_url, "w");
+      }
+    }
+
+    do_put_cb(get_datapoint_url(dp));
   } else {
     /* request data was not recognized, so it was a bad request */
     oc_send_response_no_format(request, OC_STATUS_BAD_REQUEST);
@@ -1383,6 +1471,36 @@ register_resources(void)
   const datapoint_t *dp = &g_datapoints[0];
 
   oc_ri_add_resource_block(&g_datapoints[0].resource); 
+}
+
+#ifdef MQTT_PROXY
+void
+configure_mqtt_from_parameters() {
+  strncpy(g_mqttconf_server, gMQTT_hostname0, sizeof(g_mqttconf_server));
+  g_mqttconf_port = gMQTT_port_number0;
+  strncpy(g_mqttconf_username, gMQTT_username0, sizeof(g_mqttconf_username));
+  strncpy(g_mqttconf_pwd, gMQTT_password0, sizeof(g_mqttconf_pwd));
+  strncpy(g_iid_name, gIID_name0, sizeof(g_iid_name));
+  PRINT("MQTT configuration:\n");
+  PRINT(" hostname: %s\n", g_mqttconf_server);
+  PRINT(" port    : %d\n", g_mqttconf_port);
+  PRINT(" username: %s\n", g_mqttconf_username);
+  PRINT(" password: %s\n", g_mqttconf_pwd);
+  PRINT(" IID name: %s\n", g_iid_name);
+}
+#endif
+
+/**
+ * @brief callback when a/lsm state changes
+ * @param device_index the device identifier of the list of devices
+ * @param current_state current state (i.e. after the change)
+ * @param data the supplied data.
+ */
+void
+lsm_change_cb(size_t device_index, oc_lsm_state_t current_state, void *data)
+{
+  (void)device_index;
+  (void)data;
 }
 
 /**
@@ -1530,6 +1648,9 @@ reset_variables(void)
     if (it->persistent) {
       oc_storage_erase(get_datapoint_url(it));
     }
+    if (it->default_present){
+      g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
+    }
   } 
  
 }
@@ -1580,6 +1701,7 @@ int app_initialize_stack()
   /* set the application callbacks */
   oc_set_hostname_cb(hostname_cb, NULL);
   oc_set_factory_presets_cb(factory_presets_cb, NULL);
+	oc_set_lsm_change_cb(lsm_change_cb, NULL);
 
 #if defined WIN32 || defined __linux__
   oc_set_swu_cb(swu_cb, (void *)fname);
@@ -1678,7 +1800,11 @@ print_usage()
   PRINT("reset  : does an full reset of the device\n");
   PRINT("-s <serial number> : sets the serial number of the device\n");
 #ifdef MQTT_PROXY
+  PRINT("MQTT proxy configurations (only used before ETS download):\n");
   PRINT("-host : sets the MQTT broker hostname\n");
+  PRINT("-port : sets the MQTT broker port number\n");
+  PRINT("-username : sets the MQTT username\n");
+  PRINT("-pwd : sets the MQTT password\n");
 #endif
   exit(0);
 }
@@ -1721,6 +1847,14 @@ main(int argc, char *argv[])
   sa.sa_handler = handle_signal;
   /* install Ctrl-C */
   sigaction(SIGINT, &sa, NULL);
+  #define MAX_HOSTNAME 256
+  char hostname[MAX_HOSTNAME];
+  // set the hostname
+  ret = gethostname(&hostname[0], MAX_HOSTNAME);
+  if (ret != -1) {
+    printf("Hostname:    %s\n", hostname);
+    oc_core_set_device_hostname(0, hostname, MAX_HOSTNAME);
+  }
 #endif  /* __linux__ */
 
   for (int i = 0; i < argc; i++) {
@@ -1749,6 +1883,33 @@ main(int argc, char *argv[])
           strncpy(g_mqttconf_server, argv[i + 1], sizeof(g_mqttconf_server));
         } else {
           PRINT("ERROR: \"-host\" flag detected, but no hostname provided!\n");
+        }
+      }
+      if (strcmp(argv[i], "-port") == 0) {
+        if (i + 1 < argc) {
+          // port number for MQTT proxy server
+          PRINT("MQTT proxy port number %s\n", argv[i + 1]);
+          g_mqttconf_port = atoi(argv[i + 1]);
+        } else {
+          PRINT("ERROR: \"-port\" flag detected, but no port number provided!\n");
+        }
+      }
+      if (strcmp(argv[i], "-username") == 0) {
+        if (i + 1 < argc) {
+          // username for MQTT proxy server
+          PRINT("MQTT proxy username %s\n", argv[i + 1]);
+          strncpy(g_mqttconf_username, argv[i + 1], sizeof(g_mqttconf_username));
+        } else {
+          PRINT("ERROR: \"-username\" flag detected, but no username provided!\n");
+        }
+      }
+      if (strcmp(argv[i], "-pwd") == 0) {
+        if (i + 1 < argc) {
+          // password for MQTT proxy server
+          PRINT("MQTT proxy pwd %s\n", argv[i + 1]);
+          strncpy(g_mqttconf_pwd, argv[i + 1], sizeof(g_mqttconf_pwd));
+        } else {
+          PRINT("ERROR: \"-pwd\" flag detected, but no password provided!\n");
         }
       }
 #endif

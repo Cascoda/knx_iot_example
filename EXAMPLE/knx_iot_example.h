@@ -1,6 +1,6 @@
 /*
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
- Copyright (c) 2022-2023 Cascoda Ltd
+ Copyright (c) 2022-2024 Cascoda Ltd
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  * All rights reserved.
  *
@@ -61,12 +61,12 @@ extern "C" {
 #define PACKED //!< Helper macro to create smaller packed structs
 #endif
 
-#define THIS_DEVICE 0
+#define THIS_DEVICE 0 //!< single device instance, e.g. number 0
 
 // URL defines
-#define URL_LED_1 "/p/o_1_1" //!< URL define for LED_1
-#define URL_PB_1 "/p/o_2_2" //!< URL define for PB_1
-#define URL_INFOONOFF_1 "/p/o_3_3" //!< URL define for InfoOnOff_1
+#define URL_LED_1 "/p/o_1_1" //!< URL "LED_1"  desc:""
+#define URL_PB_1 "/p/o_2_2" //!< URL "PB_1"  desc:""
+#define URL_INFOONOFF_1 "/p/o_3_3" //!< URL "InfoOnOff_1"  desc:""
 
 typedef enum DatapointType{
   DatapointType_bool,
@@ -89,17 +89,29 @@ typedef struct datapoint_t {
   int num_elements;
 } datapoint_t;
 
+/* all data points */
 extern const datapoint_t g_datapoints[];
 extern const size_t num_datapoints; 
 
- 
+  
+
 
 /**
  * @brief Returns the datapoint for the given URL
  *
  * @param url URL of the datapoint
  */
-const datapoint_t *get_datapoint_by_url(const char *url); 
+const datapoint_t *get_datapoint_by_url(const char *url);
+
+/**
+ * @brief Returns the url of the module by instance
+ *
+ * @param out_url URL of the datapoint given back (e.g. with the corrected post fix)
+ * @param in_url URL of the datapoint of the module
+ * @param module_index URL the module index
+ * @return false if operation successful, true if something went wrong 
+ */
+bool get_module_url(char* out_url, const char* in_url, int module_index); 
 
 ///@defgroup DPT_Switch
 ///@ingroup DPT_Switch
@@ -488,6 +500,7 @@ bool oc_parse_DPT_Switch_array(oc_rep_t *rep, DPT_Switch *out, int n);
  * @brief Encode a DPT_Switch using oc_rep
  * 
  * @param[in] in The DPT_Switch to encode
+ * @param[is_metadata] is_metadata Whether function is called during metadata query handling
  *
  * ~~~{.c}
  * DPT_Switch my_var;
@@ -500,7 +513,7 @@ bool oc_parse_DPT_Switch_array(oc_rep_t *rep, DPT_Switch *out, int n);
  * uint8_t buf = oc_rep_get_encoder_buf();
  * ~~~
  */
-void oc_encode_DPT_Switch(const DPT_Switch *in);
+void oc_encode_DPT_Switch(const DPT_Switch *in, bool is_metadata);
 
 /**
  * @ingroup DPT_Switch

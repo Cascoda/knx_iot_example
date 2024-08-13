@@ -22,7 +22,7 @@ The following KNX IoT Development Board Demos can be found in the releases page.
 | RTS | Room Temperature Sensor | Thermo 3 Click | Y |
 
 In the releases section TODO LINK, you will find a folder which contains the following:
-- One ETS project to configure and interact with all three of the demos.
+- One ETS project to configure and interact with all three of the demos. _The password for this file is the letter "a"_.
 - A folder for each of the demos, containing:
     - A PDF manual
     - An application binary

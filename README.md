@@ -2,9 +2,6 @@
  
 # KNX IoT Example
 
-[![BuildAllAndRelease](https://github.com/Cascoda/knx_iot_example/actions/workflows/build_all_and_release.yml/badge.svg)](https://github.com/Cascoda/knx_iot_example/actions/workflows/build_all_and_release.yml)
-[![build_embedded](https://github.com/Cascoda/knx_iot_example/actions/workflows/build_embedded.yml/badge.svg)](https://github.com/Cascoda/knx_iot_example/actions/workflows/build_embedded.yml)
-
 ## Introduction
 
 This repository hosts our latest version of the KNX IoT Development Board Demos, pre-built and ready to flash.

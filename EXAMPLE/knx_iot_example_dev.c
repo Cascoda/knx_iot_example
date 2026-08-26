@@ -114,7 +114,10 @@ void dev_put_callback(const char* url);
 
 enum prog_and_reset_constants
 {
-  RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS = 3000,
+  PROG_MODE_NUM_OF_LONG_PRESS_TRIGGERS = 1, // So activate prog mode after 1 * 1000 = 1 second
+  RESET_THREAD_NUM_OF_LONG_PRESS_TRIGGERS = 10, // So activate Thread reset after 10 * 1000 = 10 seconds
+  RESET_KNX_NUM_OF_LONG_PRESS_TRIGGERS = 5, // So activate KNX reset after 5 * 1000 = 5 seconds
+  PROG_RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS = 1000, // Hold and long press callbacks will activate after 1000ms = 1 second
   PROGRAMMING_MODE_INDICATOR_FLASHING_PERIOD_MS = 1000,
   RESET_VALUE = 2,
   RESET_INDICATOR_FLICKER_COUNT = 5,
@@ -122,23 +125,41 @@ enum prog_and_reset_constants
   RESET_THREAD_INDICATOR_FLICKER_PERIOD_MS = 600,
 };
 
-enum reset_button_state
+enum btn_hold_state
 {
-  KNX_RESET = 0,
-  THREAD_RESET = 1,
-  IGNORE_FURTHER_ACTION = 2,
+  PROG_RESET_IDLE_STATE = 0,
+  PROG_MODE_HANDLE_NOW,
+  PROG_MODE_HANDLED,
+  KNX_RESET_HANDLE_NOW,
+  KNX_RESET_HANDLED,
+  THREAD_RESET_HANDLE_NOW,
+  IGNORE_FURTHER_ACTION,
 };
 
-enum reset_button_state g_reset_state;
+enum srp_timing_constants_progmode_on
+{
+  SRP_PUBLISH_PERIOD_WHEN_PROGMODE_ON_S = 4 * 60, // This is the SRP publish period used when programming mode is ON, in seconds
+  SRP_LEASE_INTERVAL_WHEN_PROGMODE_ON_S = 7 * 60, // This is the SRP lease interval used when programming mode is ON, in seconds
+};
+
+enum btn_hold_state g_btn_hold_state;
 static ca_error reset_done_feedback(void *context);
 static ca_error programming_mode_handler(void *context);
+static ca_error progon_srp_handler(void *context);
+static void enter_programming_mode(size_t device_index);
 static void exit_programming_mode(size_t device_index);
-static void prog_mode_short_press_cb(void *context);
+static void prog_reset_hold_cb(void *context);
+static void prog_reset_long_press_cb(void *context);
 
 // Tasklet used for flashing LED when in programming mode
 static ca_tasklet g_programming_mode_handler;
 // Tasklet used for flickering LED when reset is done
 static ca_tasklet g_reset_done_indicator;
+
+// Variable used to store the lease interval used on the device when programming mode is off, in seconds
+static uint32_t g_progoff_lease_interval_s;
+// Tasklet used for scheduling SRP requests that occur when programming mode is ON
+static ca_tasklet g_progon_srp_tasklet;
 
 /**
  * @brief retrieve the fault state of the url/data point
@@ -151,8 +172,8 @@ static ca_tasklet g_reset_done_indicator;
 bool app_retrieve_fault_variable(const char* url);
 
 
-
-
+/* ------------------------------------------- */
+/* INCLUDE KNX_EXAMPLE.c */
 #include "api/oc_knx_dev.h"
 #include "devboard_btn.h"
 #include "cascoda-util/cascoda_tasklet.h"
@@ -194,6 +215,8 @@ void lssb_ShortPress_cb(void *context)
   // send out the s-mode message
   oc_do_s_mode_with_scope(5, URL_PB_1, "w");
 }
+
+
 
 
 
@@ -246,26 +269,71 @@ void dev_get_callback(const char* url){
 // Development Board
 // Generic code for programming mode and reset
 //
-static enum reset_button_state state_snapshot;
+static enum btn_hold_state state_snapshot;
+
+
+/**
+ * @brief update state of global variable g_btn_hold_state
+ */
+static void update_global_btn_hold_state(void)
+{
+  static uint8_t i = 0;
+
+  if (g_btn_hold_state == PROG_RESET_IDLE_STATE) {
+    i = 0;    
+  }
+
+  ++i;
+
+  if (i > RESET_THREAD_NUM_OF_LONG_PRESS_TRIGGERS) {
+    g_btn_hold_state = IGNORE_FURTHER_ACTION;
+  } else if (i == RESET_THREAD_NUM_OF_LONG_PRESS_TRIGGERS) {
+    g_btn_hold_state = THREAD_RESET_HANDLE_NOW;
+  } else if (i > RESET_KNX_NUM_OF_LONG_PRESS_TRIGGERS) {
+    g_btn_hold_state = KNX_RESET_HANDLED;
+  } else if (i == RESET_KNX_NUM_OF_LONG_PRESS_TRIGGERS) {
+    g_btn_hold_state = KNX_RESET_HANDLE_NOW;
+  } else if (i > PROG_MODE_NUM_OF_LONG_PRESS_TRIGGERS) {
+    g_btn_hold_state = PROG_MODE_HANDLED;
+  } else if (i == PROG_MODE_NUM_OF_LONG_PRESS_TRIGGERS) {
+    g_btn_hold_state = PROG_MODE_HANDLE_NOW;
+  }
+}
 
 /**
  * @brief button callback for the reset procedure
  * 
  * @param context the callback context
  */
-static void reset_hold_cb(void *context)
+static void prog_reset_hold_cb(void *context)
 {
   (void)context;
-  PRINT_APP("=== reset_hold_cb()\n");
+  PRINT_APP("=== prog_reset_hold_cb()\n");
 
 #ifdef DEMO_MODE
   PRINT_APP("Cannot reset when in DEMO_MODE\n");
   return;
 #endif
 
-  switch(g_reset_state)
+  // This function will update the state of g_btn_hold_state
+  update_global_btn_hold_state();
+
+  switch(g_btn_hold_state)
   {
-    case KNX_RESET:
+    case PROG_MODE_HANDLE_NOW: // if the device is not initialized, the check for PM always returns false
+      // and the PM indicator cannot be turned off, so we return early
+      if (otThreadGetDeviceRole(OT_INSTANCE) <= OT_DEVICE_ROLE_DETACHED)
+        return;
+
+      // If in programming mode, exit. Otherwise enter.
+      if (oc_knx_device_in_programming_mode(THIS_DEVICE))
+        exit_programming_mode(THIS_DEVICE);
+      else
+        enter_programming_mode(THIS_DEVICE);
+
+      break;
+
+    case KNX_RESET_HANDLE_NOW:
       // Exit programming mode if in programming mode
       if (oc_knx_device_in_programming_mode(THIS_DEVICE))
         exit_programming_mode(THIS_DEVICE);
@@ -277,29 +345,34 @@ static void reset_hold_cb(void *context)
         oc_storage_erase(url);
       }
 
-      // Give feedback to the user that reset is done (so they know when to release the button)
-      state_snapshot = KNX_RESET;
+      // Give feedback to the user that the KNX reset is being done
+      state_snapshot = KNX_RESET_HANDLE_NOW;
       oc_device_info_t* device = oc_core_get_device_info(0);
-      knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+      if (device) {
+        knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+      } else {
+        PRINT_APP("Device is NULL\n");
+      }
 
       
 
       break;
 
-    case THREAD_RESET:
+    case THREAD_RESET_HANDLE_NOW:
       // Erase the the Thread credentials
       PlatformEraseJoinerCredentials(OT_INSTANCE);
 
-      // Give feedback to the user that reset is done (so they know when to release the button)
-      state_snapshot = THREAD_RESET;
+      // Give feedback to the user that reset is being done
+      state_snapshot = THREAD_RESET_HANDLE_NOW;
 
       break;
 
+    case PROG_RESET_IDLE_STATE:
+    case PROG_MODE_HANDLED:
+    case KNX_RESET_HANDLED:
     case IGNORE_FURTHER_ACTION:
       return;
   }
-
-  ++g_reset_state;
 }
 
 /**
@@ -307,12 +380,16 @@ static void reset_hold_cb(void *context)
  * 
  * @param context the callback context
  */
-static void reset_long_press_cb(void *context)
+static void prog_reset_long_press_cb(void *context)
 {
   (void)context;
-  PRINT_APP("=== reset_long_press_cb\n");
-  TASKLET_ScheduleDelta(&g_reset_done_indicator, SCHEDULE_NOW, &state_snapshot);
-  g_reset_state = KNX_RESET;
+  PRINT_APP("=== prog_reset_long_press_cb\n");
+
+  if (g_btn_hold_state >= KNX_RESET_HANDLE_NOW) {
+    TASKLET_ScheduleDelta(&g_reset_done_indicator, SCHEDULE_NOW, &state_snapshot);
+  }
+
+  g_btn_hold_state = PROG_RESET_IDLE_STATE;
 }
 
 /**
@@ -322,16 +399,11 @@ static void reset_long_press_cb(void *context)
  */
 
 static void reset_init(dvbd_led_btn reset_button)
+
 {
   // Initializes the tasklet for reset done indicator
   TASKLET_Init(&g_reset_done_indicator, &reset_done_feedback);
-
-  // Reset the device if it is held down for the duration of RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS.
-  DVBD_SetButtonHoldCallback(reset_button, &reset_hold_cb, NULL, RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS);
-  DVBD_SetButtonLongPressCallback(reset_button, &reset_long_press_cb, NULL, RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS);
 }
- 
-
 
 /**
  * @brief reset done
@@ -341,7 +413,7 @@ static void reset_init(dvbd_led_btn reset_button)
  */
 static ca_error reset_done_feedback(void *context)
 {
-  enum reset_button_state reset_type = *((enum reset_button_state *)context);
+  enum btn_hold_state reset_type = *((enum btn_hold_state *)context);
   static uint8_t count = 0;
 
   if (count++ < RESET_INDICATOR_FLICKER_COUNT)
@@ -353,12 +425,9 @@ static ca_error reset_done_feedback(void *context)
     DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, !(led_state));
      
 
-    if (reset_type == KNX_RESET)
-    {
+    if (reset_type == KNX_RESET_HANDLE_NOW){
       TASKLET_ScheduleDelta(&g_reset_done_indicator, RESET_KNX_INDICATOR_FLICKER_PERIOD_MS / 2, context);
-    }
-    else if (reset_type == THREAD_RESET) 
-    {
+    } else if (reset_type == THREAD_RESET_HANDLE_NOW) {
       TASKLET_ScheduleDelta(&g_reset_done_indicator, RESET_THREAD_INDICATOR_FLICKER_PERIOD_MS / 2, context);
     }
   }
@@ -372,9 +441,36 @@ static ca_error reset_done_feedback(void *context)
      
     
     // After the feedback is shown for the Thread Reset, reboot the device.
-    if (reset_type == THREAD_RESET)
+    if (reset_type == THREAD_RESET_HANDLE_NOW){
       BSP_SystemReset(SYSRESET_APROM);
+    }
   }
+
+  return CA_ERROR_SUCCESS;
+}
+
+/**
+ * @brief srp updates while programming mode is ON
+ * Sends SRP update requests at regular intervals while programming mode is ON
+ * 
+ * @param context the callback context
+ */
+static ca_error progon_srp_handler(void *context)
+{
+  (void)context;
+
+  // Send SRP update
+  oc_device_info_t* device = oc_core_get_device_info(0);
+  if (device) {
+    knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+  } else {
+    PRINT_APP("Device is NULL\n");
+  }
+
+  // Schedule the sending of the next SRP update
+  TASKLET_ScheduleDelta(&g_progon_srp_tasklet, SRP_PUBLISH_PERIOD_WHEN_PROGMODE_ON_S * 1000, NULL);
+
+  return CA_ERROR_SUCCESS;
 }
 
 /**
@@ -396,18 +492,24 @@ static ca_error programming_mode_handler(void *context)
 
 
   TASKLET_ScheduleDelta(&g_programming_mode_handler, PROGRAMMING_MODE_INDICATOR_FLASHING_PERIOD_MS / 2, NULL);
+
+  return CA_ERROR_SUCCESS;
 }
 
 static ca_error become_sleepy(void *ctx)
 {
+#ifndef PHY_TESTS_ENABLED_FOR_CERT_TESTING
   otLinkModeConfig linkMode = {0};
   otThreadSetLinkMode(OT_INSTANCE, linkMode);
   // Poll after the child tells its parent it is a SED once more
   SED_PollSoon();
   return CA_ERROR_SUCCESS;
+#endif
 }
 
+#ifdef SLEEPY
 static ca_tasklet become_sleepy_tasklet;
+#endif
 
 /**
  * @brief exit the programming mode
@@ -424,8 +526,23 @@ static void exit_programming_mode(size_t device_index)
   DVBD_SetLED(PROGRAMMING_MODE_INDICATOR, LED_OFF);
    
 
+  // When programming mode is turned OFF, we want to stop the regular SRP updates
+  // that were being done while programming mode is ON, and we want to return back
+  // to using the original lease interval.
+
+  // Cancel the tasklet for doing SRP updates during programming mode ON
+  TASKLET_Cancel(&g_progon_srp_tasklet);
+
+  // Restore the original lease interval, for programming mode OFF
+  otSrpClientSetLeaseInterval(OT_INSTANCE, g_progoff_lease_interval_s);
+
+  // Immediately send an SRP request, which will contain the original lease interval
   oc_device_info_t* device = oc_core_get_device_info(0);
-  knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+  if (device) {
+    knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+  } else {
+    PRINT_APP("Device is NULL\n");
+  }
 #ifdef SLEEPY
   // Devices remain awake for 60 seconds after PM mode is disabled, to ensure programming
   // is fast and reliable
@@ -441,40 +558,41 @@ static void exit_programming_mode(size_t device_index)
  */
 static void enter_programming_mode(size_t device_index)
 {
+#ifndef PHY_TESTS_ENABLED_FOR_CERT_TESTING
 #ifdef SLEEPY
   // When in programming mode, devices must respond within 2 seconds
   otLinkModeConfig linkMode = {0};
   linkMode.mRxOnWhenIdle = 1;
   otThreadSetLinkMode(OT_INSTANCE, linkMode);
   TASKLET_Cancel(&become_sleepy_tasklet);
-#endif
+#endif // SLEEPY
+#endif // PHY_TESTS_ENABLED_FOR_CERT_TESTING
   oc_knx_device_set_programming_mode(device_index, true);
   TASKLET_ScheduleDelta(&g_programming_mode_handler, SCHEDULE_NOW, NULL);
 
+  // Programming mode will also affect how we are doing SRP. Basically, we want
+  // to reduce the publish period and lease intervals, so that entries in the mDNS
+  // server have a much shorter lifetime, allowing old information to get cleared
+  // more quickly. This helps with ETS download.
+
+  // Save the current lease interval, so that we can set that again correctly
+  // once we exit programming mode
+  g_progoff_lease_interval_s = otSrpClientGetLeaseInterval(OT_INSTANCE);
+
+  // Set the lease interval to a special value for programming mode ON
+  otSrpClientSetLeaseInterval(OT_INSTANCE, SRP_LEASE_INTERVAL_WHEN_PROGMODE_ON_S);
+
+  // Immediately send an SRP request, which will contain the new lease interval
   oc_device_info_t* device = oc_core_get_device_info(0);
-  knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
-}
+  if (device) {
+    knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+  } else {
+    PRINT_APP("Device is NULL\n");
+  }
 
-/**
- * @brief short press callback for entering/leaving the programming mode
- * 
- * @param context the callback context
- */
-static void prog_mode_short_press_cb(void *context)
-{
-  (void)context;
-  PRINT_APP("=== prog_mode_short_press_cb()\n");
-
-  // if the device is not initialized, the check for PM always returns false
-  // and the PM indicator cannot be turned off, so we return early
-  if (otThreadGetDeviceRole(OT_INSTANCE) <= OT_DEVICE_ROLE_DETACHED)
-    return;
-
-  // If in programming mode, exit. Otherwise enter.
-  if (oc_knx_device_in_programming_mode(THIS_DEVICE))
-    exit_programming_mode(THIS_DEVICE);
-  else
-    enter_programming_mode(THIS_DEVICE);
+  // Schedule SRP requests to occur at a regular interval according to the special
+  // period for programming mode ON
+  TASKLET_ScheduleDelta(&g_progon_srp_tasklet, SRP_PUBLISH_PERIOD_WHEN_PROGMODE_ON_S * 1000, NULL);
 }
 
 /**
@@ -490,13 +608,15 @@ void programming_mode_embedded(size_t device_index, bool programming_mode)
 
   // Nothing to do if the device is already in the programming mode that is
   // requested
-  if (programming_mode == oc_knx_device_in_programming_mode(device_index))
+  if (programming_mode == oc_knx_device_in_programming_mode(device_index)) {
     return;
+  }
 
-  if (programming_mode)
+  if (programming_mode) {
     enter_programming_mode(device_index);
-  else
+  } else {
     exit_programming_mode(device_index);
+  }
 }
 
 /**
@@ -515,7 +635,8 @@ void reset_embedded(size_t device_index, int reset_value, void *data)
   PRINT_APP("reset_embedded()\n");
 
   // Flicker the LED
-  reset_done_feedback(NULL);
+  static enum btn_hold_state state = KNX_RESET_HANDLE_NOW;
+  reset_done_feedback(&state);
 
   // Exit programming mode if in programming mode
   exit_programming_mode(THIS_DEVICE);
@@ -536,6 +657,11 @@ static void programming_mode_init(dvbd_led_btn flashing_led, dvbd_led_btn progra
   // Initializes the tasklet for programming mode
   TASKLET_Init(&g_programming_mode_handler, &programming_mode_handler);
 
+#ifdef SLEEPY
+  // Initialize the tasklet for delaying the sleep of a SED
+  TASKLET_Init(&become_sleepy_tasklet, become_sleepy);
+#endif
+
   // Registers the button and LED
   if (flashing_led != program_mode_button){
 #ifdef SLEEPY
@@ -552,8 +678,9 @@ static void programming_mode_init(dvbd_led_btn flashing_led, dvbd_led_btn progra
 #endif // SLEEPY
   }
 
-  // Set the device in programming mode when the program_mode_button is short-pressed
-  DVBD_SetButtonShortPressCallback(program_mode_button, &prog_mode_short_press_cb, NULL, BTN_SHORTPRESS_RELEASED);
+  // Callbacks for the hold and long presses which will control the programming mode/reset.
+  DVBD_SetButtonHoldCallback(program_mode_button, &prog_reset_hold_cb, NULL, PROG_RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS);
+  DVBD_SetButtonLongPressCallback(program_mode_button, &prog_reset_long_press_cb, NULL, PROG_RESET_HOLD_AND_LONG_PRESS_THRESHOLD_MS);
 #endif
 }
 
@@ -611,7 +738,7 @@ void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
 {
   // 20 min wakeup if no tasklet is scheduled (should not happen)
   uint32_t taskletTimeLeft = 20 * 60 * 1000;
-
+  static uint32_t time_of_last_wake = 0;
 
   /* schedule wakeup */
   TASKLET_GetTimeToNext(&taskletTimeLeft);
@@ -619,13 +746,16 @@ void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
   if (taskletTimeLeft > nextAppEvent)
     taskletTimeLeft = nextAppEvent;
 
-  bool sleep_after_joining = otThreadGetDeviceRole(OT_INSTANCE) != OT_DEVICE_ROLE_DETACHED;
+  bool is_detached = otThreadGetDeviceRole(OT_INSTANCE) == OT_DEVICE_ROLE_DETACHED;
+  bool has_been_awake = TIME_Cmp(TIME_ReadAbsoluteTime(), time_of_last_wake + 700) >= 0;
+  bool can_sleep_while_detached = (is_detached && has_been_awake);
 
   /* check that it's worth going to sleep */
-  if (taskletTimeLeft > 100 && sleep_after_joining)
+  if (( !is_detached || can_sleep_while_detached ) && taskletTimeLeft > 100)
   {
     /* and sleep */
-    DVBD_DevboardSleep(taskletTimeLeft, pDeviceRef); 
+    DVBD_Sleep(WUP_WAKEUP_ALL, taskletTimeLeft, pDeviceRef); 
+    time_of_last_wake = TIME_ReadAbsoluteTime();
   }
 }
 

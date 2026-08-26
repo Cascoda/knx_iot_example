@@ -31,6 +31,8 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 # OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+option(CASCODA_DO_LTO "Enable time consuming link-time optimization operations" OFF)
+
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR M2351)
 
@@ -40,7 +42,13 @@ set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
 
 set(CMAKE_ASM_COMPILER_TARGET "${CMAKE_CXX_COMPILER_TARGET}")
 
-set(COMMON_FLAGS "-mcpu=cortex-m23 -DCORTEX_M23 -march=armv8-m.base -mthumb -mlittle-endian -ffunction-sections -fdata-sections -finline-functions -funsigned-char -Os -g -Wl,--gc-sections")
+set(COMMON_FLAGS "-mcpu=cortex-m23 -DCORTEX_M23 -march=armv8-m.base -mthumb -mlittle-endian -ffunction-sections -fdata-sections -finline-functions -funsigned-char -Os -g -Wl,--gc-sections -fmerge-all-constants")
+
+if (CASCODA_DO_LTO)
+	set(COMMON_FLAGS "${COMMON_FLAGS} -flto -ffat-lto-objects")
+	set(CMAKE_EXE_LINKER_FLAGS "--use-linker-plugin")
+endif()
+
 
 set(CMAKE_CXX_FLAGS "--specs=nano.specs --specs=nosys.specs ${COMMON_FLAGS}")
 set(CMAKE_C_FLAGS "--specs=nano.specs --specs=nosys.specs ${COMMON_FLAGS}")

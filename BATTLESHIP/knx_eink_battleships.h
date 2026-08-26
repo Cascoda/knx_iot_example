@@ -64,13 +64,13 @@ extern "C" {
 #define THIS_DEVICE 0 //!< single device instance, e.g. number 0
 
 // URL defines
-#define URL_SENDSHOT "/p/o_1_1" //!< URL "SendShot"  desc:""
-#define URL_RECEIVESHOT "/p/o_1_2" //!< URL "ReceiveShot"  desc:""
-#define URL_SENDSHOTSTATUS "/p/o_1_3" //!< URL "SendShotStatus"  desc:""
-#define URL_RECEIVESHOTSTATUS "/p/o_1_4" //!< URL "ReceiveShotStatus"  desc:""
-#define URL_SENDREADY "/p/o_1_5" //!< URL "SendReady"  desc:""
-#define URL_RECEIVEREADY "/p/o_1_6" //!< URL "ReceiveReady"  desc:""
-#define URL_STARTING_PLAYER "/p/p_1_1" //!< URL "Starting_Player"  desc:""
+#define URL_SENDSHOT "/p/o_1_1" /* URL 'SendShot'  desc:'' */
+#define URL_RECEIVESHOT "/p/o_1_2" /* URL 'ReceiveShot'  desc:'' */
+#define URL_SENDSHOTSTATUS "/p/o_1_3" /* URL 'SendShotStatus'  desc:'' */
+#define URL_RECEIVESHOTSTATUS "/p/o_1_4" /* URL 'ReceiveShotStatus'  desc:'' */
+#define URL_SENDREADY "/p/o_1_5" /* URL 'SendReady'  desc:'' */
+#define URL_RECEIVEREADY "/p/o_1_6" /* URL 'ReceiveReady'  desc:'' */
+#define URL_STARTING_PLAYER "/p/p_1_1" /* URL 'Starting_Player'  desc:'' */
 
 typedef enum DatapointType{
   DatapointType_bool,
@@ -87,13 +87,17 @@ typedef enum DatapointType{
 typedef struct datapoint_t {
   oc_resource_t resource;
   const char *const *metadata;
+#ifndef OPTIMIZE_FLASH_SIZE
   const char *feedback_url;
+#endif
   DatapointType type;
   void *g_var;
+#ifndef OPTIMIZE_FLASH_SIZE
   volatile void *g_fault;
-  bool persistent;
-  bool default_present;
-  int num_elements;
+#endif
+  uint16_t num_elements;
+  uint8_t persistent : 1;
+  uint8_t default_present : 1;
 } datapoint_t;
 
 /* all data points */
@@ -115,13 +119,36 @@ const datapoint_t *get_datapoint_by_url(const char *url);
 
 /**
  * @brief Returns the url of the module by instance
+ * 
+ * Example usage:
+ * 
+ * char URL_instance[50];
+ * uint8_t module_index = 4;
+ * get_module_url(URL_instance, "/p/S_1", module_index);
+ * 
+ * // Result: URL_instance becomes "/p/S_4"
  *
  * @param out_url URL of the datapoint given back (e.g. with the corrected post fix)
  * @param in_url URL of the datapoint of the module
  * @param module_index URL the module index
  * @return false if operation successful, true if something went wrong 
  */
-bool get_module_url(char* out_url, const char* in_url, int module_index); 
+bool get_module_url(char* out_url, const char* in_url, int module_index);
+
+/**
+ * @brief Returns the instance number of the url.
+ *        NOTE: Only works for instance numbers 1-999.
+ * 
+ * Example usage:
+ * 
+ * uint8_t instance_num = get_instance_num_from_url("/p/S_13");
+ * 
+ * // Result: instance_num will be assigned the integer 13.
+ *
+ * @param url url of the datapoint, from which the instance number will be extracted
+ * @return 0 if any failure occurred. Otherwise, the instance number is returned.
+ */
+uint16_t get_instance_num_from_url(const char *url); 
 
 ///@defgroup DPT_Param_Bool
 ///@ingroup DPT_Param_Bool
@@ -335,7 +362,7 @@ struct EinkScreenHandler
   NUM_SCREENS
 };
 
-extern enum Screen g_screen_nr;
+extern enum Screen g_screen_nr; 
 
 const char* screen_get_title(enum Screen);
 
@@ -362,6 +389,22 @@ uint8_t get_batt_percent(void);
  * @param screen Screen number for the header
  */
 void app_header_draw(enum Screen nr);
+
+/**
+ * @brief Draw the nice screen header and frame, including the instance number.
+ *        This is to be used for screens that display an instance of a module.
+ *
+ * @param screen Screen number for the header
+ * @param instance Instance number for that screen
+ */
+void app_header_draw_with_instance(enum Screen nr, uint8_t instance);
+
+/**
+ * @brief Draw the nice screen header and frame.
+ *
+ * @param str The string to put in the header.
+ */
+void app_header_draw_custom_str(char *str);
 
 /**
  * @brief Draw a scrollable menu and highlight
@@ -397,6 +440,13 @@ void go_next_screen();
  * Can be used as an eink screen event handler.
  */
 void go_prev_screen();
+
+/**
+ * @brief Enables detection of recent interactions. This will be used to
+ *        determine if a device can go to sleep.
+ * @param recent_threshold threshold for what is considered to be "recent", in ms
+ */
+void enable_detection_of_recent_interactions(uint32_t recent_threshold);
 /**
  * @brief Load the builtin SPLASH_SCREEN screen immediately
  * Can be used as an eink screen event handler.
@@ -592,6 +642,14 @@ int app_initialize_stack();
  */
 int app_set_serial_number(const char* serial_number);
 
+
+/**
+ * @brief retrieves the order number number
+ * 
+ * @return order_number the order_number as string
+ */
+const char* app_get_order_number(void);
+
 /**
  * @brief Gets the number of elements in dp/param array
  * 
@@ -625,6 +683,19 @@ bool app_is_DPT_Param_Bool_url(const char* url);
  * ~~~
  */
 void app_set_DPT_Param_Bool_default_value(const char* url);
+
+/**
+ * @ingroup DPT_Param_Bool
+ * @brief Set a DPT_Param_Bool to the default value, and write
+ * said value to persistent storage if the parameter is persistent
+ * 
+ * @param[in] url the url for the DPT_Param_Bool to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Param_Bool_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Param_Bool_default_value_persistent(const char* url);
 
 /**
  * @ingroup DPT_Param_Bool
@@ -1011,6 +1082,19 @@ void app_set_DPT_Shot_Status_default_value(const char* url);
 
 /**
  * @ingroup DPT_Shot_Status
+ * @brief Set a DPT_Shot_Status to the default value, and write
+ * said value to persistent storage if the parameter is persistent
+ * 
+ * @param[in] url the url for the DPT_Shot_Status to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Shot_Status_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Shot_Status_default_value_persistent(const char* url);
+
+/**
+ * @ingroup DPT_Shot_Status
  * @brief Set a DPT_Shot_Status
  * 
  * @param[in] url the url for the DPT_Shot_Status to set
@@ -1394,6 +1478,19 @@ void app_set_DPT_Start_default_value(const char* url);
 
 /**
  * @ingroup DPT_Start
+ * @brief Set a DPT_Start to the default value, and write
+ * said value to persistent storage if the parameter is persistent
+ * 
+ * @param[in] url the url for the DPT_Start to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Start_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Start_default_value_persistent(const char* url);
+
+/**
+ * @ingroup DPT_Start
  * @brief Set a DPT_Start
  * 
  * @param[in] url the url for the DPT_Start to set
@@ -1774,6 +1871,19 @@ bool app_is_DPT_Uint_XY_url(const char* url);
  * ~~~
  */
 void app_set_DPT_Uint_XY_default_value(const char* url);
+
+/**
+ * @ingroup DPT_Uint_XY
+ * @brief Set a DPT_Uint_XY to the default value, and write
+ * said value to persistent storage if the parameter is persistent
+ * 
+ * @param[in] url the url for the DPT_Uint_XY to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Uint_XY_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Uint_XY_default_value_persistent(const char* url);
 
 /**
  * @ingroup DPT_Uint_XY
@@ -2209,6 +2319,17 @@ void app_set_fault_variable(const char* url, bool value);
  * @return false: No entry in Group Object Table has the URL
  */
 bool app_is_url_in_use(const char* url);
+
+
+/**
+ * @brief Generic function to set a value
+ *
+ * @param dp the data point
+ * @param in data going in
+ * @param start start position
+ * @param n amount to set
+ */
+void datapoint_set(const datapoint_t *dp, void *in, int start, int n) ;
 
 /**
  * @brief function to report if the (oscore) security is turn on for this instance

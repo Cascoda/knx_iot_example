@@ -12,7 +12,7 @@
  *
  * 2. Redistributions in binary form, except as embedded into a Cascoda Limited.
  *    integrated circuit in a product or a software update for such product, must
- *    reproduce the above copyright notice, this list of  conditions and the following
+ *    reproduce the above copyright notice, this list of conditions and the following
  *    disclaimer in the documentation and/or other materials provided with the distribution.
  *
  * 3. Neither the name of Cascoda Limited nor the names of its contributors may be used to
@@ -41,6 +41,7 @@
  * @file
  *
  * KNX Battleships Demo
+ * KNX Battleships Demo eink
  
  * ## Application Design
  *
@@ -88,6 +89,7 @@
 #include "oc_rep.h"
 #include "oc_helpers.h"
 #include "api/oc_knx_fp.h"
+#include "api/oc_knx_malloc.h"
 #include "port/oc_clock.h"
 #include <signal.h>
 /* test purpose only; commandline reset */
@@ -102,12 +104,17 @@
 #endif
 #include "knx_eink_battleships.h"
 
+
 #include <stdlib.h>
 #include <ctype.h>
 
 #ifdef __linux__
 /** linux specific code */
 #include <pthread.h>
+#include "port/linux/manufacturer_storage.h"
+#include <unistd.h>
+#define GETCURRENTDIR getcwd
+
 #ifndef NO_MAIN
 static pthread_mutex_t mutex;
 static pthread_cond_t cv;
@@ -119,6 +126,15 @@ static struct timespec ts;
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
+
+#ifndef DPT_Param_Float
+#define DPT_Param_Float float
+#endif
+
+#ifndef DPT_varString_8859_1
+#define DPT_varString_8859_1 char
+#endif
+
 #define STORE_PREFIX "app"
 
 #define MY_NAME "KNX Battleships Demo" /**< The name of the application */
@@ -130,11 +146,9 @@ static struct timespec ts;
 static CONDITION_VARIABLE cv; /**< event loop variable */
 static CRITICAL_SECTION cs;   /**< event loop variable */
 #include <direct.h>
-#define GetCurrentDir _getcwd
-#else
-#include <unistd.h>
-#define GetCurrentDir getcwd
+#define GETCURRENTDIR _getcwd
 #endif
+
 
 #ifdef HARDWARE_INIT
  void hardware_init(void);
@@ -143,7 +157,10 @@ static CRITICAL_SECTION cs;   /**< event loop variable */
 #define btoa(x) ((x) ? "true" : "false")
 volatile int quit = 0;  /**< stop variable, used by handle_signal */
 bool g_reset = false;   /**< reset variable, set by commandline arguments */
-char g_serial_number[20] = "00fa10010713";
+char g_serial_number[20] = "029B10010713";
+const char g_order_number[20] = "";
+
+
 
 
 
@@ -155,12 +172,20 @@ volatile DPT_Shot_Status gReceiveShotStatus;   /**< global variable for ReceiveS
 volatile DPT_Start gSendReady;   /**< global variable for SendReady */
 volatile DPT_Start gReceiveReady;   /**< global variable for ReceiveReady */
 volatile DPT_Param_Bool gStarting_Player;   /**< global variable for Starting_Player */
+#ifndef OPTIMIZE_FLASH_SIZE
 
 volatile bool g_faultReceiveShot;   /**< global variable for fault ReceiveShot */
 volatile bool g_faultReceiveShotStatus;   /**< global variable for fault ReceiveShotStatus */
 volatile bool g_faultReceiveReady;   /**< global variable for fault ReceiveReady */
+#endif /* OPTIMIZE_FLASH_SIZE */
 
 volatile DPT_Param_Bool gStarting_Player1;   /**< global variable for Starting_Player */ 
+
+
+#ifdef OPTIMIZE_FLASH_SIZE
+//const char* EMPTY_NAME = "";
+#define EMPTY_NAME ""
+#endif
 
 void
 get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data);
@@ -187,235 +212,319 @@ _Pragma("GCC diagnostic ignored \"-Wdiscarded-array-qualifiers\"")
 
 
 const datapoint_t g_datapoints[6] = {
-  /*[0] (saved=0)= */{
+  
+  /*[0] (saved=0)  virtual=0 index = 0 */
+  {
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[1].resource,
-      /*device*/ 0,
+#ifndef OPTIMIZE_FLASH_SIZE
       /*name*/ oc_string_create_const("SendShot"),
+#else
+      /*name*/ oc_string_create_const(EMPTY_NAME),
+#endif
       /*uri*/ oc_string_create_const("/p/o_1_1"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.101" ),
-      /*dpt*/ oc_string_create_const("urn:knx:dpt.uint_XY"),
-      /*interfaces*/ OC_IF_D | OC_IF_O,
-      /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_DISCOVERABLE,
+      /*dpt*/ oc_string_create_const("urn:knx:dpt.uint_XY"),  
       /*get_handler*/ {get_generic, (void*)&g_datapoints[0]},
       /*put_handler*/ {put_generic, (void*)&g_datapoints[0]},
       /*post_handler*/ {NULL, NULL},
       /*delete_handler*/ {NULL, NULL},
       /*get_properties*/ { NULL, NULL },
       /*set_properties*/ { NULL, NULL },
+      /*runtime_data*/ &runtime_dataSendShot,
+      /*interfaces*/ OC_IF_D | OC_IF_O,
+      /*content_type*/ APPLICATION_CBOR,
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
+      /*device*/ 0,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_dataSendShot
+      /*properties*/ OC_DISCOVERABLE,
     },
     /*.metadata =*/ NULL,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.feedback_url =*/NULL, 
+#endif
     /*.type =*/ DatapointType_DPT_Uint_XY,
     /*.g_var =*/ (void*)&gSendShot,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.g_fault =*/ NULL,
+#endif
+    /*.num_elements =*/ 0,
     /*.persistent =*/ false,
     /*.default_present =*/ false,
-    /*.num_elements =*/ 0
   },
-  /*[1] (saved=0)= */{
+  
+  /*[1] (saved=0)  virtual=0 index = 1 */
+  {
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[2].resource,
-      /*device*/ 0,
+#ifndef OPTIMIZE_FLASH_SIZE
       /*name*/ oc_string_create_const("ReceiveShot"),
+#else
+      /*name*/ oc_string_create_const(EMPTY_NAME),
+#endif
       /*uri*/ oc_string_create_const("/p/o_1_2"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65501.111" ),
-      /*dpt*/ oc_string_create_const("urn:knx:dpt.uint_XY"),
-      /*interfaces*/ OC_IF_D | OC_IF_I,
-      /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_DISCOVERABLE,
+      /*dpt*/ oc_string_create_const("urn:knx:dpt.uint_XY"),  
       /*get_handler*/ {get_generic, (void*)&g_datapoints[1]},
       /*put_handler*/ {put_generic, (void*)&g_datapoints[1]},
       /*post_handler*/ {NULL, NULL},
       /*delete_handler*/ {NULL, NULL},
       /*get_properties*/ { NULL, NULL },
       /*set_properties*/ { NULL, NULL },
+      /*runtime_data*/ &runtime_dataReceiveShot,
+      /*interfaces*/ OC_IF_D | OC_IF_I,
+      /*content_type*/ APPLICATION_CBOR,
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
+      /*device*/ 0,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_dataReceiveShot
+      /*properties*/ OC_DISCOVERABLE,
     },
     /*.metadata =*/ NULL,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.feedback_url =*/NULL, 
+#endif
     /*.type =*/ DatapointType_DPT_Uint_XY,
     /*.g_var =*/ (void*)&gReceiveShot,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.g_fault =*/ &g_faultReceiveShot,
+#endif
+    /*.num_elements =*/ 0,
     /*.persistent =*/ false,
     /*.default_present =*/ false,
-    /*.num_elements =*/ 0
   },
-  /*[2] (saved=0)= */{
+  
+  /*[2] (saved=0)  virtual=0 index = 2 */
+  {
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[3].resource,
-      /*device*/ 0,
+#ifndef OPTIMIZE_FLASH_SIZE
       /*name*/ oc_string_create_const("SendShotStatus"),
+#else
+      /*name*/ oc_string_create_const(EMPTY_NAME),
+#endif
       /*uri*/ oc_string_create_const("/p/o_1_3"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65501.102" ),
-      /*dpt*/ oc_string_create_const("urn:knx:dpt.shot_Status"),
-      /*interfaces*/ OC_IF_D | OC_IF_O,
-      /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_DISCOVERABLE,
+      /*dpt*/ oc_string_create_const("urn:knx:dpt.shot_Status"),  
       /*get_handler*/ {get_generic, (void*)&g_datapoints[2]},
       /*put_handler*/ {put_generic, (void*)&g_datapoints[2]},
       /*post_handler*/ {NULL, NULL},
       /*delete_handler*/ {NULL, NULL},
       /*get_properties*/ { NULL, NULL },
       /*set_properties*/ { NULL, NULL },
+      /*runtime_data*/ &runtime_dataSendShotStatus,
+      /*interfaces*/ OC_IF_D | OC_IF_O,
+      /*content_type*/ APPLICATION_CBOR,
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
+      /*device*/ 0,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_dataSendShotStatus
+      /*properties*/ OC_DISCOVERABLE,
     },
     /*.metadata =*/ NULL,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.feedback_url =*/NULL, 
+#endif
     /*.type =*/ DatapointType_DPT_Shot_Status,
     /*.g_var =*/ (void*)&gSendShotStatus,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.g_fault =*/ NULL,
+#endif
+    /*.num_elements =*/ 0,
     /*.persistent =*/ false,
     /*.default_present =*/ false,
-    /*.num_elements =*/ 0
   },
-  /*[3] (saved=0)= */{
+  
+  /*[3] (saved=0)  virtual=0 index = 3 */
+  {
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[4].resource,
-      /*device*/ 0,
+#ifndef OPTIMIZE_FLASH_SIZE
       /*name*/ oc_string_create_const("ReceiveShotStatus"),
+#else
+      /*name*/ oc_string_create_const(EMPTY_NAME),
+#endif
       /*uri*/ oc_string_create_const("/p/o_1_4"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.112" ),
-      /*dpt*/ oc_string_create_const("urn:knx:dpt.shot_Status"),
-      /*interfaces*/ OC_IF_D | OC_IF_I,
-      /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_DISCOVERABLE,
+      /*dpt*/ oc_string_create_const("urn:knx:dpt.shot_Status"),  
       /*get_handler*/ {get_generic, (void*)&g_datapoints[3]},
       /*put_handler*/ {put_generic, (void*)&g_datapoints[3]},
       /*post_handler*/ {NULL, NULL},
       /*delete_handler*/ {NULL, NULL},
       /*get_properties*/ { NULL, NULL },
       /*set_properties*/ { NULL, NULL },
+      /*runtime_data*/ &runtime_dataReceiveShotStatus,
+      /*interfaces*/ OC_IF_D | OC_IF_I,
+      /*content_type*/ APPLICATION_CBOR,
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
+      /*device*/ 0,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_dataReceiveShotStatus
+      /*properties*/ OC_DISCOVERABLE,
     },
     /*.metadata =*/ NULL,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.feedback_url =*/NULL, 
+#endif
     /*.type =*/ DatapointType_DPT_Shot_Status,
     /*.g_var =*/ (void*)&gReceiveShotStatus,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.g_fault =*/ &g_faultReceiveShotStatus,
+#endif
+    /*.num_elements =*/ 0,
     /*.persistent =*/ false,
     /*.default_present =*/ false,
-    /*.num_elements =*/ 0
   },
-  /*[4] (saved=0)= */{
+  
+  /*[4] (saved=0)  virtual=0 index = 4 */
+  {
     /* .resource=*/ { 
       /*next*/ (oc_resource_t*)&g_datapoints[5].resource,
-      /*device*/ 0,
+#ifndef OPTIMIZE_FLASH_SIZE
       /*name*/ oc_string_create_const("SendReady"),
+#else
+      /*name*/ oc_string_create_const(EMPTY_NAME),
+#endif
       /*uri*/ oc_string_create_const("/p/o_1_5"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.103" ),
-      /*dpt*/ oc_string_create_const("urn:knx:dpt.start"),
-      /*interfaces*/ OC_IF_D | OC_IF_O,
-      /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_DISCOVERABLE,
+      /*dpt*/ oc_string_create_const("urn:knx:dpt.start"),  
       /*get_handler*/ {get_generic, (void*)&g_datapoints[4]},
       /*put_handler*/ {put_generic, (void*)&g_datapoints[4]},
       /*post_handler*/ {NULL, NULL},
       /*delete_handler*/ {NULL, NULL},
       /*get_properties*/ { NULL, NULL },
       /*set_properties*/ { NULL, NULL },
+      /*runtime_data*/ &runtime_dataSendReady,
+      /*interfaces*/ OC_IF_D | OC_IF_O,
+      /*content_type*/ APPLICATION_CBOR,
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
+      /*device*/ 0,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_dataSendReady
+      /*properties*/ OC_DISCOVERABLE,
     },
     /*.metadata =*/ NULL,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.feedback_url =*/NULL, 
+#endif
     /*.type =*/ DatapointType_DPT_Start,
     /*.g_var =*/ (void*)&gSendReady,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.g_fault =*/ NULL,
+#endif
+    /*.num_elements =*/ 0,
     /*.persistent =*/ false,
     /*.default_present =*/ false,
-    /*.num_elements =*/ 0
   },
-  /*[5] (saved=0)= */{
+  
+  /*[5] (saved=0)  virtual=0 index = 5 */
+  {
     /* .resource=*/ { 
       /*next*/(oc_resource_t*)&g_parameters[0].resource,
-      /*device*/ 0,
+#ifndef OPTIMIZE_FLASH_SIZE
       /*name*/ oc_string_create_const("ReceiveReady"),
+#else
+      /*name*/ oc_string_create_const(EMPTY_NAME),
+#endif
       /*uri*/ oc_string_create_const("/p/o_1_6"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65501.113" ),
-      /*dpt*/ oc_string_create_const("urn:knx:dpt.start"),
-      /*interfaces*/ OC_IF_D | OC_IF_I,
-      /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_DISCOVERABLE,
+      /*dpt*/ oc_string_create_const("urn:knx:dpt.start"),  
       /*get_handler*/ {get_generic, (void*)&g_datapoints[5]},
       /*put_handler*/ {put_generic, (void*)&g_datapoints[5]},
       /*post_handler*/ {NULL, NULL},
       /*delete_handler*/ {NULL, NULL},
       /*get_properties*/ { NULL, NULL },
       /*set_properties*/ { NULL, NULL },
+      /*runtime_data*/ &runtime_dataReceiveReady,
+      /*interfaces*/ OC_IF_D | OC_IF_I,
+      /*content_type*/ APPLICATION_CBOR,
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
+      /*device*/ 0,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_dataReceiveReady
+      /*properties*/ OC_DISCOVERABLE,
     },
     /*.metadata =*/ NULL,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.feedback_url =*/NULL, 
+#endif
     /*.type =*/ DatapointType_DPT_Start,
     /*.g_var =*/ (void*)&gReceiveReady,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.g_fault =*/ &g_faultReceiveReady,
+#endif
+    /*.num_elements =*/ 0,
     /*.persistent =*/ false,
     /*.default_present =*/ false,
-    /*.num_elements =*/ 0
   }, 
 }; 
+
+
+
+/* all: code:1 */
 const datapoint_t g_parameters[1] = {
-  /* 1 (saved=1)[7] =*/ {
+  /* new: [0] (saved=1)  virtual=0 index = 1 */
+  /* 1 (saved=1)[7] */ 
+  {
     /* .resource=*/ { 
       /*next*/(oc_resource_t*)&app_resource_end,
-      /*device*/ 0,
+
+#ifndef OPTIMIZE_FLASH_SIZE
       /*name*/ oc_string_create_const("Starting_Player"),
+#else
+     /*name*/ oc_string_create_const(EMPTY_NAME),
+#endif
       /*uri*/ oc_string_create_const("/p/p_1_1"),
       /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.65500.201" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.param_Bool"),
-      /*interfaces*/ OC_IF_D | OC_IF_P,
-      /*content_type*/ APPLICATION_CBOR,
-      /*properties*/ OC_UNDISCOVERABLE,
       /*get_handler*/ {get_generic, (void*)&g_parameters[0]},
       /*put_handler*/ {put_generic, (void*)&g_parameters[0]},
       /*post_handler*/ {NULL, NULL},
       /*delete_handler*/ {NULL, NULL},
       /*get_properties*/ { NULL, NULL },
       /*set_properties*/ { NULL, NULL },
+      /*runtime_data*/ &runtime_dataStarting_Player,
+      /*interfaces*/ OC_IF_D | OC_IF_P,
+      /*content_type*/ APPLICATION_CBOR,
       /*observe_period_seconds*/ 0,
       /*fb_instance*/ 1,
+      /*device*/ 0,
       /*is_const*/ true,
-      /*runtime_data*/ &runtime_dataStarting_Player
+      /*properties*/ OC_UNDISCOVERABLE,
     },
     /*.metadata =*/ NULL,
-    /*.feedback_url =*/ NULL, 
+#ifndef OPTIMIZE_FLASH_SIZE
+    /*.feedback_url =*/ NULL,
+#endif
     /*.type =*/ DatapointType_DPT_Param_Bool,
     /*.g_var =*/ (void*)&gStarting_Player1,
+#ifndef OPTIMIZE_FLASH_SIZE
     /*.g_fault =*/ NULL,
+#endif
+    /*.num_elements =*/ 0,
     /*.persistent =*/ true,
-    /*.default_present =*/ false,
-    /*.num_elements =*/ 0
+    /*.default_present =*/ false
   }, 
 };     
 /* 
-  total saved parameters/datapoints = 1
+  
+  datapoints                        = 6
+  parameters                        = 1
+  ---------------------------------------- +
+  total resource objects (dp+param) = 7
+  
   total group object entries        = 
   total publisher entries           = 
   total receiver entries            = 
   total auth entries                = 
   total SSN entries                 = 
   ---------------------------------------- +
-  total files                       = 101
+  total files                       = 100
+  
+  Total persistent:                 = 107
+  
+  virtual                           = 0
 */
 
 
@@ -446,6 +555,7 @@ struct datapoint_type_t {
   app_get_array_fn app_get_array;
   app_get_array_elems_fn app_get_array_elems;
   app_set_default_value_fn app_set_default_value;
+  app_set_default_value_fn app_set_default_value_persistent;
   app_set_variable_fn app_set_variable;
   app_set_array_fn app_set_array;
   app_set_array_elems_fn app_set_array_elems;
@@ -468,6 +578,7 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
     (app_get_array_fn)app_get_DPT_Param_Bool_array,
     (app_get_array_elems_fn)app_get_DPT_Param_Bool_array_elems,
     (app_set_default_value_fn)app_set_DPT_Param_Bool_default_value,
+    (app_set_default_value_fn)app_set_DPT_Param_Bool_default_value_persistent,
     (app_set_variable_fn)app_set_DPT_Param_Bool_variable,
     (app_set_array_fn)app_set_DPT_Param_Bool_array,
     (app_set_array_elems_fn)app_set_DPT_Param_Bool_array_elems,
@@ -484,6 +595,7 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
     (app_get_array_fn)app_get_DPT_Shot_Status_array,
     (app_get_array_elems_fn)app_get_DPT_Shot_Status_array_elems,
     (app_set_default_value_fn)app_set_DPT_Shot_Status_default_value,
+    (app_set_default_value_fn)app_set_DPT_Shot_Status_default_value_persistent,
     (app_set_variable_fn)app_set_DPT_Shot_Status_variable,
     (app_set_array_fn)app_set_DPT_Shot_Status_array,
     (app_set_array_elems_fn)app_set_DPT_Shot_Status_array_elems,
@@ -500,6 +612,7 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
     (app_get_array_fn)app_get_DPT_Start_array,
     (app_get_array_elems_fn)app_get_DPT_Start_array_elems,
     (app_set_default_value_fn)app_set_DPT_Start_default_value,
+    (app_set_default_value_fn)app_set_DPT_Start_default_value_persistent,
     (app_set_variable_fn)app_set_DPT_Start_variable,
     (app_set_array_fn)app_set_DPT_Start_array,
     (app_set_array_elems_fn)app_set_DPT_Start_array_elems,
@@ -516,6 +629,7 @@ const struct datapoint_type_t g_datapoint_types[DatapointType_MAX_NUM] = {
     (app_get_array_fn)app_get_DPT_Uint_XY_array,
     (app_get_array_elems_fn)app_get_DPT_Uint_XY_array_elems,
     (app_set_default_value_fn)app_set_DPT_Uint_XY_default_value,
+    (app_set_default_value_fn)app_set_DPT_Uint_XY_default_value_persistent,
     (app_set_variable_fn)app_set_DPT_Uint_XY_variable,
     (app_set_array_fn)app_set_DPT_Uint_XY_array,
     (app_set_array_elems_fn)app_set_DPT_Uint_XY_array_elems,
@@ -562,56 +676,70 @@ static bool oc_encode_datapoint(const datapoint_t *dp, int pn, int ps, bool is_m
   const struct datapoint_type_t *dpt = &g_datapoint_types[dp->type];
   int n = ps;
   count = count?count:1;
-  if (pn*ps+n >= count)
+  if (pn*ps+n >= count) {
     n = count-pn*ps;
+  }
   if (ps > 1 && dpt->oc_encode_array == NULL)
     return false;
-  if (ps == 1 && dpt->oc_encode == NULL)
+  if (ps == 1 && dpt->oc_encode == NULL) {
     return false;
-  if (dpt->app_get_array_elems == NULL)
+  }
+  if (dpt->app_get_array_elems == NULL) {
     return false;
-  void *var = malloc(get_dpt_size(dp->type) * (ps));
+  }
+  void *var = knx_malloc(get_dpt_size(dp->type) * (ps));
+  if (var == NULL) {
+    OC_ERR("out of memory!");
+    return false;
+  }
   if(g_datapoint_types[dp->type].app_get_array_elems(get_datapoint_url(dp), var, pn*ps, n) == NULL) {
-    free(var);
+    knx_free(var);
     return false;
   }
   
-  if (ps > 1) 
+  if (ps > 1) {
     g_datapoint_types[dp->type].oc_encode_array(var, n);
-  else 
+  } else {
     g_datapoint_types[dp->type].oc_encode(var, is_metadata);
+  }
   
-  free(var);
+  knx_free(var);
   return true;
 }
 
 static bool oc_parse_datapoint(const datapoint_t *dp, oc_rep_t *rep, void *out, int n) {
   const struct datapoint_type_t *dpt = &g_datapoint_types[dp->type];
-  if (out == NULL || rep == NULL)
+  if (out == NULL || rep == NULL) {
     return false;
+  }
   if (n > 1){
-    if (dpt->oc_parse_array == NULL)
+    if (dpt->oc_parse_array == NULL) {
       return false;
+    }
     return dpt->oc_parse_array(rep, out, n);
   }
   else{
-    if (dpt->oc_parse == NULL)
+    if (dpt->oc_parse == NULL) {
       return false;
+    }
     return dpt->oc_parse(rep, out);
   } 
 }
 
 void datapoint_set(const datapoint_t *dp, void *in, int start, int n) 
 {
-  if (in == NULL)
+  if (in == NULL) {
     return;
-  if (start > 0 || n > 1){
-    if (g_datapoint_types[dp->type].app_set_array)
-      g_datapoint_types[dp->type].app_set_array_elems(get_datapoint_url(dp), in, start, n, true);
   }
-  else
-    if (g_datapoint_types[dp->type].app_set_variable)
+  if (start > 0 || n > 1){
+    if (g_datapoint_types[dp->type].app_set_array) {
+      g_datapoint_types[dp->type].app_set_array_elems(get_datapoint_url(dp), in, start, n, true);
+    }
+  } else {
+    if (g_datapoint_types[dp->type].app_set_variable) {
       g_datapoint_types[dp->type].app_set_variable(get_datapoint_url(dp), in);
+    }
+  }
 }
 
 const datapoint_t *get_datapoint_by_url(const char *url) {
@@ -689,6 +817,49 @@ bool get_module_url(char* out_url, const char* in_url, int module_index)
   return false;
 }
 
+uint16_t get_instance_num_from_url(const char *url)
+{  
+  enum
+  {
+      UNITS_DIGIT = 0,
+      TENS_DIGIT = 1,
+      HUNDREDS_DIGIT = 2,
+      MAX_DIGIT_SUPPORT = 3,
+  };
+  
+  uint8_t digits_after_underscore = 0;
+  char digits_array[MAX_DIGIT_SUPPORT] = {0};
+  size_t url_length = strlen(url);
+    
+  // Find out how many more digits we have after the underscore
+  for (int i = url_length - 1; i >= 0; --i) {
+    // We have reached the underscore, we can stop counting 
+    if (url[i] == '_') {
+      break;
+    }
+    
+    // We have counted one more digit after the underscore
+    if (isdigit(url[i])) {
+      if (++digits_after_underscore > MAX_DIGIT_SUPPORT) {
+        PRINT_APP("ERROR: Instance number is too big, > 999\n");
+        return 0;
+      } 
+      digits_array[digits_after_underscore - 1] = url[i] - '0';
+    } else {
+      PRINT_APP("ERROR: URL Does not end with an underscore followed by a number. Are you sure this URL uses instances?\n");
+      // We have encountered a non-digit and non-underscore, which is not expected.
+      return 0;
+    }
+  }
+  
+  // Add all the digits up
+  uint16_t instance_number = digits_array[UNITS_DIGIT]  
+                             + 10 * digits_array[TENS_DIGIT]
+                             + 100 * digits_array[HUNDREDS_DIGIT];
+                             
+  return instance_number;
+}
+
 // Getters/Setters for DPT_Param_Bool
 
 bool app_is_DPT_Param_Bool_url(const char* url)
@@ -709,6 +880,13 @@ void app_set_DPT_Param_Bool_default_value(const char* url)
   (void)url;
   // No default value, do nothing...
 }
+
+void app_set_DPT_Param_Bool_default_value_persistent(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
 
 void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* in, int start, int n, bool store_persistently)
 {
@@ -734,10 +912,14 @@ void app_set_DPT_Param_Bool_array_elems(const char* url, const DPT_Param_Bool* i
   }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Param_Bool *data = calloc(sizeof(DPT_Param_Bool), count);
-    memcpy(&data[start], in, n*sizeof(DPT_Param_Bool));
-    persistent_store_DPT_Param_Bool_array(get_datapoint_url(dp), data, count);
-    free(data);
+    DPT_Param_Bool *data = knx_calloc(sizeof(DPT_Param_Bool), count);
+    if (data) {
+      memcpy(&data[start], in, n*sizeof(DPT_Param_Bool));
+      persistent_store_DPT_Param_Bool_array(get_datapoint_url(dp), data, count);
+      knx_free(data);
+    } else {
+      OC_ERR("app_set_DPT_Param_Bool_array_elems, could not store persistent");
+    }
   }
   return;
 }
@@ -777,12 +959,16 @@ const DPT_Param_Bool* app_get_DPT_Param_Bool_array_elems(const char *url, DPT_Pa
   }else if (dp->persistent && out) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Param_Bool *data = calloc(sizeof(DPT_Param_Bool), count);
-    memset(out, 0, n*sizeof(DPT_Param_Bool));
-    if (persistent_load_DPT_Param_Bool_array(get_datapoint_url(dp), data, count)) {
-      memcpy(out, &data[start], n*sizeof(DPT_Param_Bool));
+    DPT_Param_Bool *data = knx_calloc(sizeof(DPT_Param_Bool), count);
+    if (data) {
+      memset(out, 0, n*sizeof(DPT_Param_Bool));
+      if (persistent_load_DPT_Param_Bool_array(get_datapoint_url(dp), data, count)) {
+        memcpy(out, &data[start], n*sizeof(DPT_Param_Bool));
+      }
+      knx_free(data);
+    } else {
+       OC_ERR("app_get_DPT_Param_Bool_array_elems, could not load persistent data");
     }
-    free(data);
     return out;
   }
   return NULL;
@@ -830,7 +1016,7 @@ bool oc_parse_DPT_Param_Bool(oc_rep_t *rep, DPT_Param_Bool *out)
 
 bool oc_parse_DPT_Param_Bool_array(oc_rep_t *rep, DPT_Param_Bool *out, int n)
 {
-  oc_rep_t *rep_arr;
+  //oc_rep_t *rep_arr;
   int i = 0;
   if (rep == NULL || out == NULL) {
     return false;
@@ -852,6 +1038,8 @@ void oc_encode_DPT_Param_Bool_single(CborEncoder *parent, const DPT_Param_Bool *
     return;
   }
   oc_rep_i_set_key(parent, 1);
+  
+  /* debugging: Enumeration */
   cbor_encode_int(parent, (int64_t)*in);
 }
 
@@ -891,9 +1079,9 @@ void persistent_store_DPT_Param_Bool(const char *name, const DPT_Param_Bool *in)
 void persistent_store_DPT_Param_Bool_array(const char *name, const DPT_Param_Bool *in, int n)
 {
   uint8_t *rep_buf;
-  long ret;
-  const size_t max_size = 8 * n + 2;
-  rep_buf = malloc(max_size);
+  long ret = 0;
+  const size_t max_size = 8 * (size_t)n + 2;
+  rep_buf = knx_malloc(max_size);
 #ifdef OPTIMIZE_STORAGE
 // use input as storage name with "/p/" prefix removed
  const char* store_name = (char *)&name[3];
@@ -906,25 +1094,26 @@ void persistent_store_DPT_Param_Bool_array(const char *name, const DPT_Param_Boo
     pos = strchr(store_name, '/');
   }
 #endif
-
-  oc_rep_new(rep_buf, max_size);
-  oc_encode_DPT_Param_Bool_array(in, n);
-  int size = oc_rep_get_encoded_payload_size();
-  if (size > 0) {
-    PRINT_APP("storing '%s', size: %d\n", name, size);
-    for(int i = 0; i < size; i++) {
-      PRINT_APP("%02X ", rep_buf[i]);
+  if (rep_buf) {
+    oc_rep_new(rep_buf, max_size);
+    oc_encode_DPT_Param_Bool_array(in, n);
+    int size = oc_rep_get_encoded_payload_size();
+    if (size > 0) {
+      PRINT_APP("storing '%s', size: %d\n", name, size);
+      for(int i = 0; i < size; i++) {
+        PRINT_APP("%02X ", rep_buf[i]);
+      }
+      PRINT_APP("\n");
+      ret = oc_storage_write(store_name, rep_buf, size);
     }
-    PRINT_APP("\n");
-    ret = oc_storage_write(store_name, rep_buf, size);
-  }else{
-    PRINT_APP("Error encoding DPT_Param_Bool %s for storage\n", name);
   }
 
   if (ret <= 0) {
-    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_write failed with error: %ld\n", -ret);
   }
-  free(rep_buf);
+  if (rep_buf) {
+    knx_free(rep_buf);
+  }
 }
 
 bool persistent_load_DPT_Param_Bool(const char *name, DPT_Param_Bool *out)
@@ -937,6 +1126,7 @@ bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out,
   oc_rep_t *rep = NULL;
   int max_size = 8 * n + 2;
   uint8_t *oc_storage_buf;
+  struct oc_memb *prev_rep_obj = NULL;
 #ifdef OPTIMIZE_STORAGE
  // use input as storage name with "/p/" prefix removed
   const char* store_name = (char *)&name[3];
@@ -949,21 +1139,25 @@ bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out,
     pos = strchr(store_name, '/');
   }
 #endif
-  long ret;
+  long ret = -1;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
-  oc_storage_buf = malloc(max_size);
-  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
+  oc_storage_buf = knx_malloc(max_size);
+  if (oc_storage_buf == NULL) {
+    OC_ERR("out of memory!");
+    goto err;
+  }
+  prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
-  PRINT_APP("oc_storage_read() returned %d\n", ret);
+  PRINT_APP("oc_storage_read() returned %ld\n", ret);
   for(int i = 0; i < ret; i++) {
     PRINT_APP("%02X ", oc_storage_buf[i]);
   }
   PRINT_APP("\n");
   if (ret <= 0) {
-    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_read failed with error: %ld\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -974,10 +1168,13 @@ bool persistent_load_DPT_Param_Bool_array(const char *name, DPT_Param_Bool *out,
   }
   error = false;
 err:
-  free(oc_storage_buf);
+  if (oc_storage_buf) {
+    knx_free(oc_storage_buf);
+  }
   oc_free_rep(rep);
   if(error) {
-    oc_storage_erase(name);
+    PRINT_APP("persistent_load_DPT_Param_Bool_array failed with error: %ld\n", -ret);
+    //oc_storage_erase(name);
   }
   oc_rep_set_pool(prev_rep_obj);
   return !error;
@@ -1012,7 +1209,7 @@ int app_sscanf_DPT_Param_Bool(DPT_Param_Bool *in, char* text)
   // strtok is destructing the input string so copy it first
   token = strtok(temp_string, s);
   // Enumeration
-  retval = sscanf(token, " %d", in);
+  retval = sscanf(token, " %d", (int*)in);
   if (retval != 1) return 1;
   token = strtok(NULL, s);
 
@@ -1061,6 +1258,13 @@ void app_set_DPT_Shot_Status_default_value(const char* url)
   // No default value, do nothing...
 }
 
+void app_set_DPT_Shot_Status_default_value_persistent(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
+
 void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status* in, int start, int n, bool store_persistently)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
@@ -1085,10 +1289,14 @@ void app_set_DPT_Shot_Status_array_elems(const char* url, const DPT_Shot_Status*
   }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Shot_Status *data = calloc(sizeof(DPT_Shot_Status), count);
-    memcpy(&data[start], in, n*sizeof(DPT_Shot_Status));
-    persistent_store_DPT_Shot_Status_array(get_datapoint_url(dp), data, count);
-    free(data);
+    DPT_Shot_Status *data = knx_calloc(sizeof(DPT_Shot_Status), count);
+    if (data) {
+      memcpy(&data[start], in, n*sizeof(DPT_Shot_Status));
+      persistent_store_DPT_Shot_Status_array(get_datapoint_url(dp), data, count);
+      knx_free(data);
+    } else {
+      OC_ERR("app_set_DPT_Shot_Status_array_elems, could not store persistent");
+    }
   }
   return;
 }
@@ -1128,12 +1336,16 @@ const DPT_Shot_Status* app_get_DPT_Shot_Status_array_elems(const char *url, DPT_
   }else if (dp->persistent && out) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Shot_Status *data = calloc(sizeof(DPT_Shot_Status), count);
-    memset(out, 0, n*sizeof(DPT_Shot_Status));
-    if (persistent_load_DPT_Shot_Status_array(get_datapoint_url(dp), data, count)) {
-      memcpy(out, &data[start], n*sizeof(DPT_Shot_Status));
+    DPT_Shot_Status *data = knx_calloc(sizeof(DPT_Shot_Status), count);
+    if (data) {
+      memset(out, 0, n*sizeof(DPT_Shot_Status));
+      if (persistent_load_DPT_Shot_Status_array(get_datapoint_url(dp), data, count)) {
+        memcpy(out, &data[start], n*sizeof(DPT_Shot_Status));
+      }
+      knx_free(data);
+    } else {
+       OC_ERR("app_get_DPT_Shot_Status_array_elems, could not load persistent data");
     }
-    free(data);
     return out;
   }
   return NULL;
@@ -1186,7 +1398,7 @@ bool oc_parse_DPT_Shot_Status(oc_rep_t *rep, DPT_Shot_Status *out)
 
 bool oc_parse_DPT_Shot_Status_array(oc_rep_t *rep, DPT_Shot_Status *out, int n)
 {
-  oc_rep_t *rep_arr;
+  //oc_rep_t *rep_arr;
   int i = 0;
   if (rep == NULL || out == NULL) {
     return false;
@@ -1253,9 +1465,9 @@ void persistent_store_DPT_Shot_Status(const char *name, const DPT_Shot_Status *i
 void persistent_store_DPT_Shot_Status_array(const char *name, const DPT_Shot_Status *in, int n)
 {
   uint8_t *rep_buf;
-  long ret;
-  const size_t max_size = 14 * n + 2;
-  rep_buf = malloc(max_size);
+  long ret = 0;
+  const size_t max_size = 14 * (size_t)n + 2;
+  rep_buf = knx_malloc(max_size);
 #ifdef OPTIMIZE_STORAGE
 // use input as storage name with "/p/" prefix removed
  const char* store_name = (char *)&name[3];
@@ -1268,25 +1480,26 @@ void persistent_store_DPT_Shot_Status_array(const char *name, const DPT_Shot_Sta
     pos = strchr(store_name, '/');
   }
 #endif
-
-  oc_rep_new(rep_buf, max_size);
-  oc_encode_DPT_Shot_Status_array(in, n);
-  int size = oc_rep_get_encoded_payload_size();
-  if (size > 0) {
-    PRINT_APP("storing '%s', size: %d\n", name, size);
-    for(int i = 0; i < size; i++) {
-      PRINT_APP("%02X ", rep_buf[i]);
+  if (rep_buf) {
+    oc_rep_new(rep_buf, max_size);
+    oc_encode_DPT_Shot_Status_array(in, n);
+    int size = oc_rep_get_encoded_payload_size();
+    if (size > 0) {
+      PRINT_APP("storing '%s', size: %d\n", name, size);
+      for(int i = 0; i < size; i++) {
+        PRINT_APP("%02X ", rep_buf[i]);
+      }
+      PRINT_APP("\n");
+      ret = oc_storage_write(store_name, rep_buf, size);
     }
-    PRINT_APP("\n");
-    ret = oc_storage_write(store_name, rep_buf, size);
-  }else{
-    PRINT_APP("Error encoding DPT_Shot_Status %s for storage\n", name);
   }
 
   if (ret <= 0) {
-    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_write failed with error: %ld\n", -ret);
   }
-  free(rep_buf);
+  if (rep_buf) {
+    knx_free(rep_buf);
+  }
 }
 
 bool persistent_load_DPT_Shot_Status(const char *name, DPT_Shot_Status *out)
@@ -1299,6 +1512,7 @@ bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *ou
   oc_rep_t *rep = NULL;
   int max_size = 14 * n + 2;
   uint8_t *oc_storage_buf;
+  struct oc_memb *prev_rep_obj = NULL;
 #ifdef OPTIMIZE_STORAGE
  // use input as storage name with "/p/" prefix removed
   const char* store_name = (char *)&name[3];
@@ -1311,21 +1525,25 @@ bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *ou
     pos = strchr(store_name, '/');
   }
 #endif
-  long ret;
+  long ret = -1;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
-  oc_storage_buf = malloc(max_size);
-  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
+  oc_storage_buf = knx_malloc(max_size);
+  if (oc_storage_buf == NULL) {
+    OC_ERR("out of memory!");
+    goto err;
+  }
+  prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
-  PRINT_APP("oc_storage_read() returned %d\n", ret);
+  PRINT_APP("oc_storage_read() returned %ld\n", ret);
   for(int i = 0; i < ret; i++) {
     PRINT_APP("%02X ", oc_storage_buf[i]);
   }
   PRINT_APP("\n");
   if (ret <= 0) {
-    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_read failed with error: %ld\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -1336,10 +1554,13 @@ bool persistent_load_DPT_Shot_Status_array(const char *name, DPT_Shot_Status *ou
   }
   error = false;
 err:
-  free(oc_storage_buf);
+  if (oc_storage_buf) {
+    knx_free(oc_storage_buf);
+  }
   oc_free_rep(rep);
   if(error) {
-    oc_storage_erase(name);
+    PRINT_APP("persistent_load_DPT_Shot_Status_array failed with error: %ld\n", -ret);
+    //oc_storage_erase(name);
   }
   oc_rep_set_pool(prev_rep_obj);
   return !error;
@@ -1377,6 +1598,8 @@ int app_sscanf_DPT_Shot_Status(DPT_Shot_Status *in, char* text)
 
   // strtok is destructing the input string so copy it first
   token = strtok(temp_string, s);
+  // complex data type
+  // bool
   {
     int var;
     retval = sscanf(token, " %d", &var);
@@ -1384,13 +1607,15 @@ int app_sscanf_DPT_Shot_Status(DPT_Shot_Status *in, char* text)
   }
   if (retval != 1) return 1;
   token = strtok(NULL, s);
+  // bool
   {
     int var;
     retval = sscanf(token, " %d", &var);
     in->DPST_60004_1_F_2 = (bool)var;
   }
   if (retval != 1) return 1;
-  token = strtok(NULL, s);
+  token = strtok(NULL, s);  
+  // single type
   {
     int var;
     retval = sscanf(token, " %d", &var);
@@ -1447,6 +1672,13 @@ void app_set_DPT_Start_default_value(const char* url)
   // No default value, do nothing...
 }
 
+void app_set_DPT_Start_default_value_persistent(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
+
 void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int start, int n, bool store_persistently)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
@@ -1471,10 +1703,14 @@ void app_set_DPT_Start_array_elems(const char* url, const DPT_Start* in, int sta
   }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Start *data = calloc(sizeof(DPT_Start), count);
-    memcpy(&data[start], in, n*sizeof(DPT_Start));
-    persistent_store_DPT_Start_array(get_datapoint_url(dp), data, count);
-    free(data);
+    DPT_Start *data = knx_calloc(sizeof(DPT_Start), count);
+    if (data) {
+      memcpy(&data[start], in, n*sizeof(DPT_Start));
+      persistent_store_DPT_Start_array(get_datapoint_url(dp), data, count);
+      knx_free(data);
+    } else {
+      OC_ERR("app_set_DPT_Start_array_elems, could not store persistent");
+    }
   }
   return;
 }
@@ -1514,12 +1750,16 @@ const DPT_Start* app_get_DPT_Start_array_elems(const char *url, DPT_Start* out, 
   }else if (dp->persistent && out) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Start *data = calloc(sizeof(DPT_Start), count);
-    memset(out, 0, n*sizeof(DPT_Start));
-    if (persistent_load_DPT_Start_array(get_datapoint_url(dp), data, count)) {
-      memcpy(out, &data[start], n*sizeof(DPT_Start));
+    DPT_Start *data = knx_calloc(sizeof(DPT_Start), count);
+    if (data) {
+      memset(out, 0, n*sizeof(DPT_Start));
+      if (persistent_load_DPT_Start_array(get_datapoint_url(dp), data, count)) {
+        memcpy(out, &data[start], n*sizeof(DPT_Start));
+      }
+      knx_free(data);
+    } else {
+       OC_ERR("app_get_DPT_Start_array_elems, could not load persistent data");
     }
-    free(data);
     return out;
   }
   return NULL;
@@ -1563,7 +1803,7 @@ bool oc_parse_DPT_Start(oc_rep_t *rep, DPT_Start *out)
 
 bool oc_parse_DPT_Start_array(oc_rep_t *rep, DPT_Start *out, int n)
 {
-  oc_rep_t *rep_arr;
+  //oc_rep_t *rep_arr;
   int i = 0;
   if (rep == NULL || out == NULL) {
     return false;
@@ -1585,6 +1825,8 @@ void oc_encode_DPT_Start_single(CborEncoder *parent, const DPT_Start *in)
     return;
   }
   oc_rep_i_set_key(parent, 1);
+  
+  /* debugging: bool */
   cbor_encode_boolean(parent, (bool)*in);
 }
 
@@ -1624,9 +1866,9 @@ void persistent_store_DPT_Start(const char *name, const DPT_Start *in)
 void persistent_store_DPT_Start_array(const char *name, const DPT_Start *in, int n)
 {
   uint8_t *rep_buf;
-  long ret;
-  const size_t max_size = 4 * n + 2;
-  rep_buf = malloc(max_size);
+  long ret = 0;
+  const size_t max_size = 4 * (size_t)n + 2;
+  rep_buf = knx_malloc(max_size);
 #ifdef OPTIMIZE_STORAGE
 // use input as storage name with "/p/" prefix removed
  const char* store_name = (char *)&name[3];
@@ -1639,25 +1881,26 @@ void persistent_store_DPT_Start_array(const char *name, const DPT_Start *in, int
     pos = strchr(store_name, '/');
   }
 #endif
-
-  oc_rep_new(rep_buf, max_size);
-  oc_encode_DPT_Start_array(in, n);
-  int size = oc_rep_get_encoded_payload_size();
-  if (size > 0) {
-    PRINT_APP("storing '%s', size: %d\n", name, size);
-    for(int i = 0; i < size; i++) {
-      PRINT_APP("%02X ", rep_buf[i]);
+  if (rep_buf) {
+    oc_rep_new(rep_buf, max_size);
+    oc_encode_DPT_Start_array(in, n);
+    int size = oc_rep_get_encoded_payload_size();
+    if (size > 0) {
+      PRINT_APP("storing '%s', size: %d\n", name, size);
+      for(int i = 0; i < size; i++) {
+        PRINT_APP("%02X ", rep_buf[i]);
+      }
+      PRINT_APP("\n");
+      ret = oc_storage_write(store_name, rep_buf, size);
     }
-    PRINT_APP("\n");
-    ret = oc_storage_write(store_name, rep_buf, size);
-  }else{
-    PRINT_APP("Error encoding DPT_Start %s for storage\n", name);
   }
 
   if (ret <= 0) {
-    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_write failed with error: %ld\n", -ret);
   }
-  free(rep_buf);
+  if (rep_buf) {
+    knx_free(rep_buf);
+  }
 }
 
 bool persistent_load_DPT_Start(const char *name, DPT_Start *out)
@@ -1670,6 +1913,7 @@ bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n)
   oc_rep_t *rep = NULL;
   int max_size = 4 * n + 2;
   uint8_t *oc_storage_buf;
+  struct oc_memb *prev_rep_obj = NULL;
 #ifdef OPTIMIZE_STORAGE
  // use input as storage name with "/p/" prefix removed
   const char* store_name = (char *)&name[3];
@@ -1682,21 +1926,25 @@ bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n)
     pos = strchr(store_name, '/');
   }
 #endif
-  long ret;
+  long ret = -1;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
-  oc_storage_buf = malloc(max_size);
-  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
+  oc_storage_buf = knx_malloc(max_size);
+  if (oc_storage_buf == NULL) {
+    OC_ERR("out of memory!");
+    goto err;
+  }
+  prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
-  PRINT_APP("oc_storage_read() returned %d\n", ret);
+  PRINT_APP("oc_storage_read() returned %ld\n", ret);
   for(int i = 0; i < ret; i++) {
     PRINT_APP("%02X ", oc_storage_buf[i]);
   }
   PRINT_APP("\n");
   if (ret <= 0) {
-    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_read failed with error: %ld\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -1707,10 +1955,13 @@ bool persistent_load_DPT_Start_array(const char *name, DPT_Start *out, int n)
   }
   error = false;
 err:
-  free(oc_storage_buf);
+  if (oc_storage_buf) {
+    knx_free(oc_storage_buf);
+  }
   oc_free_rep(rep);
   if(error) {
-    oc_storage_erase(name);
+    PRINT_APP("persistent_load_DPT_Start_array failed with error: %ld\n", -ret);
+    //oc_storage_erase(name);
   }
   oc_rep_set_pool(prev_rep_obj);
   return !error;
@@ -1797,6 +2048,13 @@ void app_set_DPT_Uint_XY_default_value(const char* url)
   // No default value, do nothing...
 }
 
+void app_set_DPT_Uint_XY_default_value_persistent(const char* url)
+{
+  (void)url;
+  // No default value, do nothing...
+}
+
+
 void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int start, int n, bool store_persistently)
 {
   const datapoint_t *dp = get_datapoint_by_url(url);
@@ -1821,10 +2079,14 @@ void app_set_DPT_Uint_XY_array_elems(const char* url, const DPT_Uint_XY* in, int
   }else if (dp->persistent && store_persistently) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Uint_XY *data = calloc(sizeof(DPT_Uint_XY), count);
-    memcpy(&data[start], in, n*sizeof(DPT_Uint_XY));
-    persistent_store_DPT_Uint_XY_array(get_datapoint_url(dp), data, count);
-    free(data);
+    DPT_Uint_XY *data = knx_calloc(sizeof(DPT_Uint_XY), count);
+    if (data) {
+      memcpy(&data[start], in, n*sizeof(DPT_Uint_XY));
+      persistent_store_DPT_Uint_XY_array(get_datapoint_url(dp), data, count);
+      knx_free(data);
+    } else {
+      OC_ERR("app_set_DPT_Uint_XY_array_elems, could not store persistent");
+    }
   }
   return;
 }
@@ -1864,12 +2126,16 @@ const DPT_Uint_XY* app_get_DPT_Uint_XY_array_elems(const char *url, DPT_Uint_XY*
   }else if (dp->persistent && out) {
     int count = dp->num_elements;
     count = count?count:1;
-    DPT_Uint_XY *data = calloc(sizeof(DPT_Uint_XY), count);
-    memset(out, 0, n*sizeof(DPT_Uint_XY));
-    if (persistent_load_DPT_Uint_XY_array(get_datapoint_url(dp), data, count)) {
-      memcpy(out, &data[start], n*sizeof(DPT_Uint_XY));
+    DPT_Uint_XY *data = knx_calloc(sizeof(DPT_Uint_XY), count);
+    if (data) {
+      memset(out, 0, n*sizeof(DPT_Uint_XY));
+      if (persistent_load_DPT_Uint_XY_array(get_datapoint_url(dp), data, count)) {
+        memcpy(out, &data[start], n*sizeof(DPT_Uint_XY));
+      }
+      knx_free(data);
+    } else {
+       OC_ERR("app_get_DPT_Uint_XY_array_elems, could not load persistent data");
     }
-    free(data);
     return out;
   }
   return NULL;
@@ -1913,7 +2179,7 @@ bool oc_parse_DPT_Uint_XY(oc_rep_t *rep, DPT_Uint_XY *out)
 
 bool oc_parse_DPT_Uint_XY_array(oc_rep_t *rep, DPT_Uint_XY *out, int n)
 {
-  oc_rep_t *rep_arr;
+  //oc_rep_t *rep_arr;
   int i = 0;
   if (rep == NULL || out == NULL) {
     return false;
@@ -1977,9 +2243,9 @@ void persistent_store_DPT_Uint_XY(const char *name, const DPT_Uint_XY *in)
 void persistent_store_DPT_Uint_XY_array(const char *name, const DPT_Uint_XY *in, int n)
 {
   uint8_t *rep_buf;
-  long ret;
-  const size_t max_size = 15 * n + 2;
-  rep_buf = malloc(max_size);
+  long ret = 0;
+  const size_t max_size = 15 * (size_t)n + 2;
+  rep_buf = knx_malloc(max_size);
 #ifdef OPTIMIZE_STORAGE
 // use input as storage name with "/p/" prefix removed
  const char* store_name = (char *)&name[3];
@@ -1992,25 +2258,26 @@ void persistent_store_DPT_Uint_XY_array(const char *name, const DPT_Uint_XY *in,
     pos = strchr(store_name, '/');
   }
 #endif
-
-  oc_rep_new(rep_buf, max_size);
-  oc_encode_DPT_Uint_XY_array(in, n);
-  int size = oc_rep_get_encoded_payload_size();
-  if (size > 0) {
-    PRINT_APP("storing '%s', size: %d\n", name, size);
-    for(int i = 0; i < size; i++) {
-      PRINT_APP("%02X ", rep_buf[i]);
+  if (rep_buf) {
+    oc_rep_new(rep_buf, max_size);
+    oc_encode_DPT_Uint_XY_array(in, n);
+    int size = oc_rep_get_encoded_payload_size();
+    if (size > 0) {
+      PRINT_APP("storing '%s', size: %d\n", name, size);
+      for(int i = 0; i < size; i++) {
+        PRINT_APP("%02X ", rep_buf[i]);
+      }
+      PRINT_APP("\n");
+      ret = oc_storage_write(store_name, rep_buf, size);
     }
-    PRINT_APP("\n");
-    ret = oc_storage_write(store_name, rep_buf, size);
-  }else{
-    PRINT_APP("Error encoding DPT_Uint_XY %s for storage\n", name);
   }
 
   if (ret <= 0) {
-    PRINT_APP("oc_storage_write failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_write failed with error: %ld\n", -ret);
   }
-  free(rep_buf);
+  if (rep_buf) {
+    knx_free(rep_buf);
+  }
 }
 
 bool persistent_load_DPT_Uint_XY(const char *name, DPT_Uint_XY *out)
@@ -2023,6 +2290,7 @@ bool persistent_load_DPT_Uint_XY_array(const char *name, DPT_Uint_XY *out, int n
   oc_rep_t *rep = NULL;
   int max_size = 15 * n + 2;
   uint8_t *oc_storage_buf;
+  struct oc_memb *prev_rep_obj = NULL;
 #ifdef OPTIMIZE_STORAGE
  // use input as storage name with "/p/" prefix removed
   const char* store_name = (char *)&name[3];
@@ -2035,21 +2303,25 @@ bool persistent_load_DPT_Uint_XY_array(const char *name, DPT_Uint_XY *out, int n
     pos = strchr(store_name, '/');
   }
 #endif
-  long ret;
+  long ret = -1;
   bool error = true;
   struct oc_memb rep_objects = { sizeof(oc_rep_t), 0, 0, 0, 0 };
-  oc_storage_buf = malloc(max_size);
-  struct oc_memb *prev_rep_obj = oc_rep_get_pool();
+  oc_storage_buf = knx_malloc(max_size);
+  if (oc_storage_buf == NULL) {
+    OC_ERR("out of memory!");
+    goto err;
+  }
+  prev_rep_obj = oc_rep_get_pool();
   oc_rep_set_pool(&rep_objects);
 
   ret = oc_storage_read(store_name, oc_storage_buf, max_size);
-  PRINT_APP("oc_storage_read() returned %d\n", ret);
+  PRINT_APP("oc_storage_read() returned %ld\n", ret);
   for(int i = 0; i < ret; i++) {
     PRINT_APP("%02X ", oc_storage_buf[i]);
   }
   PRINT_APP("\n");
   if (ret <= 0) {
-    PRINT_APP("oc_storage_read failed with error: %d\n", -ret);
+    PRINT_APP("oc_storage_read failed with error: %ld\n", -ret);
     goto err;
   }
   if (oc_parse_rep(oc_storage_buf, ret, &rep) != CborNoError) {
@@ -2060,10 +2332,13 @@ bool persistent_load_DPT_Uint_XY_array(const char *name, DPT_Uint_XY *out, int n
   }
   error = false;
 err:
-  free(oc_storage_buf);
+  if (oc_storage_buf) {
+    knx_free(oc_storage_buf);
+  }
   oc_free_rep(rep);
   if(error) {
-    oc_storage_erase(name);
+    PRINT_APP("persistent_load_DPT_Uint_XY_array failed with error: %ld\n", -ret);
+    //oc_storage_erase(name);
   }
   oc_rep_set_pool(prev_rep_obj);
   return !error;
@@ -2099,13 +2374,16 @@ int app_sscanf_DPT_Uint_XY(DPT_Uint_XY *in, char* text)
 
   // strtok is destructing the input string so copy it first
   token = strtok(temp_string, s);
+  // complex data type  
+  // single type
   {
     unsigned int var;
     retval = sscanf(token, " %u", &var);
     if (retval != 1) return 1;
     in->DPST_60009_1_F_1 = var;
   }
-  token = strtok(NULL, s);
+  token = strtok(NULL, s);  
+  // single type
   {
     unsigned int var;
     retval = sscanf(token, " %u", &var);
@@ -2239,9 +2517,13 @@ void app_set_fault_variable(const char* url, bool value)
   if ((dp->resource.interfaces & OC_IF_A) == 0) {
     return;
   }
+#ifndef OPTIMIZE_FLASH_SIZE
   if (dp->g_fault) {
     *((bool*)dp->g_fault) = value;
   }
+#else
+  PRINT_APP("app_set_fault_variable: OPTIMIZED");
+#endif
   //TODO: Add back support for changing the feedback variable
 }
 
@@ -2257,12 +2539,16 @@ bool app_retrieve_fault_variable(const char* url)
   if (dp == NULL) {
     return false;
   }
-  if (dp->resource.interfaces & OC_IF_A == 0) {
+  if ((dp->resource.interfaces & OC_IF_A) == 0) {
     return false;
   }
+#ifndef OPTIMIZE_FLASH_SIZE
   if (dp->g_fault) {
     return *((bool*)dp->g_fault);
   }
+#else
+  PRINT_APP("app_retrieve_fault_variable: OPTIMIZED");
+#endif
   return false;
 }
 
@@ -2270,7 +2556,7 @@ bool app_retrieve_fault_variable(const char* url)
 
 bool app_is_url_parameter(const char* url)
 {
-  // all parametes start with /p/pxxx
+  // all parameters start with /p/pxxx
   if (strncmp(url,"/p/p",4) == 0 ) {
     return false;
   }
@@ -2300,7 +2586,7 @@ const char* app_get_parameter_name(int index)
   return NULL;
 }
 
-bool app_is_secure()
+bool app_is_secure(void)
 {
 #ifdef OC_OSCORE
   return true;
@@ -2362,6 +2648,7 @@ void register_resources(void);
 void initialize_variables();
 void reset_variables();
 void logic_initialize();
+bool logic_recent_interaction(void);
 int app_init(void);
 #ifdef __cplusplus
 }
@@ -2428,7 +2715,7 @@ void app_str_to_upper(char *str){
  *
  * sets the:
  * - manufacturer     : cascoda
- * - serial number    : 00fa10010713
+ * - serial number    : 029B10010713
  * - base path
  * - knx spec version
  * - hardware version : [0, 4, 0]
@@ -2448,19 +2735,23 @@ app_init(void)
 
   oc_device_info_t *device = oc_core_get_device_info(0);
 
-#ifdef LINUX
-  #define MAX_HOSTNAME 50
-  char hostname[50];
-  // set the hostname
-  ret = gethostname(&hostname[0], 50);
+
+#ifndef MAX_HOSTNAME
+#define MAX_HOSTNAME 50
+#endif /*MAX_HOSTNAME */
+
+#ifdef __linux__
+  char hostname[MAX_HOSTNAME];
+  // set device hostname
+  ret = gethostname(&hostname[0], MAX_HOSTNAME);
   if (ret != -1) {
     printf("Hostname (linux):    %s\n", hostname);
     oc_core_set_device_hostname(0, hostname);
   }
 #endif
 #ifdef WIN32
-  char hostname_str[50];
-  int error = gethostname(hostname_str, 50);
+  char hostname_str[MAX_HOSTNAME];
+  int error = gethostname(hostname_str, MAX_HOSTNAME);
   if (error == 0) {
     printf("Hostname (win32):    %s\n", hostname_str);
     oc_core_set_device_hostname(0, hostname_str);
@@ -2471,13 +2762,16 @@ app_init(void)
   /* set the hardware version 0.4.0 */
   oc_core_set_device_hwv(0, 0, 4, 0);
   
+#ifdef OC_SWU
+  oc_swu_set_hardware_ref(0,"0000000000000000");
+#endif /* OC_SWU*/
   
   /* set the firmware version 0.4.0 */
   oc_core_set_device_fwv(0, 0, 4, 0);
   
   
   /* manufacturer id */
-  oc_core_set_device_mid(0, 0x00FA);
+  oc_core_set_device_mid(0, 0x029B);
   /* set the hardware type*/
   oc_core_set_device_hwt(0, "000000000000");
   /* set the model */
@@ -2490,9 +2784,13 @@ app_init(void)
     oc_spake_set_password(PASSWORD);
 
 
-  strncpy(serial_number_uppercase, oc_string(device->serialnumber), 19);
-  app_str_to_upper(serial_number_uppercase);
-  printf("\n === QR Code: KNX:S:%s;P:%s ===\n", serial_number_uppercase, oc_spake_get_password());
+  if (device) {
+    strncpy(serial_number_uppercase, oc_string(device->serialnumber), 19);
+    app_str_to_upper(serial_number_uppercase);
+    printf("\n === QR Code: KNX:S:%s;P:%s ===\n", serial_number_uppercase, oc_spake_get_password());
+  } else {
+    printf("NO DEVICE, cannot access serial number\n");
+  }
 #endif
 
   initialize_variables();
@@ -2513,7 +2811,7 @@ app_init(void)
 /**
  * @brief returns the password
  */
-const char* app_get_password()
+const char* app_get_password(void)
 {
 #ifdef OC_SPAKE
   return oc_spake_get_password();
@@ -2624,16 +2922,19 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
           m_valid = true;
           oc_rep_set_key(oc_rep_object(root), "if");
           oc_rep_begin_array(oc_rep_object(root), if);
-          for (int i = 1; i <= (1<<OC_MAX_IF_MASKS); i <<=1)
-            if (dp->resource.interfaces&i)
+          for (int i = 1; i <= (1<<OC_MAX_IF_MASKS); i <<=1) {
+            if (dp->resource.interfaces&i) {
               oc_rep_add_text_string(if, get_interface_string(dp->resource.interfaces&i));
+            }
+          }
           oc_rep_end_array(oc_rep_object(root), if);
         }
         if ((strncmp(m, "dpt", m_len) == 0) |
             (strncmp(m, "*", m_len) == 0) ) {
           m_valid = true;
           char *full_dpt = oc_string(request->resource->dpt);
-          oc_rep_set_text_string(root, dpt, &full_dpt[7]);
+          char *dpt_to_add = strstr(full_dpt, "urn:knx:") ? &full_dpt[7] : full_dpt;
+          oc_rep_set_text_string(root, dpt, dpt_to_add);
         }
         // ga
         if ((strncmp(m, "ga", m_len) == 0) |
@@ -2658,7 +2959,7 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
       } /* query iterator */
       oc_rep_end_root_object();
       if (m_valid == false) {
-        oc_send_response_no_format(request, OC_STATUS_BAD_REQUEST);
+        oc_send_response_no_format(request, OC_STATUS_NOT_FOUND);
         goto done;
       }
     } else {
@@ -2717,17 +3018,22 @@ put_generic(oc_request_t *request, oc_interface_mask_t interfaces,
   rep = request->request_payload;
   /* loop over all the entries in the request */
   /* handle the type of payload correctly. */
-  void *new_value = malloc(get_dpt_size(dp->type) * ps);
+  void *new_value = knx_malloc(get_dpt_size(dp->type) * ps);
+  if (new_value == NULL) {
+    OC_ERR("out of memory!");
+    return; 
+  }
   error_state = !oc_parse_datapoint(dp, rep, new_value, ps);
 
   if (error_state == false){
     const oc_resource_t *my_resource =
     oc_ri_get_app_resource_by_uri(request->uri_path, strlen(request->uri_path), 0);
-    if (my_resource != NULL)
+    if (my_resource != NULL) {
       oc_notify_observers(my_resource);
-
+    }
     oc_send_response_no_format(request, OC_STATUS_CHANGED);
     datapoint_set(dp, new_value, pn*ps, ps);
+#ifndef OPTIMIZE_FLASH_SIZE
     if (dp->feedback_url) {
       //check types match
       const datapoint_t *feedback = get_datapoint_by_url(dp->feedback_url);
@@ -2737,13 +3043,13 @@ put_generic(oc_request_t *request, oc_interface_mask_t interfaces,
         oc_do_s_mode_with_scope(5, dp->feedback_url, "w");
       }
     }
-
+#endif /* OPTIMIZE_FLASH_SIZE */
     do_put_cb(get_datapoint_url(dp));
   } else {
     /* request data was not recognized, so it was a bad request */
     oc_send_response_no_format(request, OC_STATUS_BAD_REQUEST);
   }
-  free(new_value);
+  knx_free(new_value);
   PRINT("-- End put_generic (%s)\n", get_datapoint_url(dp));
 }
 
@@ -2779,16 +3085,16 @@ register_resources(void)
 #ifdef MQTT_PROXY
 void
 configure_mqtt_from_parameters() {
-  strncpy(g_mqttconf_server, gMQTT_hostname0, sizeof(g_mqttconf_server));
+  strncpy(g_mqttconf_server, (char*)gMQTT_hostname0, sizeof(g_mqttconf_server));
   g_mqttconf_port = gMQTT_port_number0;
-  strncpy(g_mqttconf_username, gMQTT_username0, sizeof(g_mqttconf_username));
-  strncpy(g_mqttconf_pwd, gMQTT_password0, sizeof(g_mqttconf_pwd));
-  strncpy(g_iid_name, gIID_name0, sizeof(g_iid_name));
+  strncpy(g_mqttconf_username, (char*)gMQTT_username0, sizeof(g_mqttconf_username));
+  strncpy(g_mqttconf_pwd, (char*)gMQTT_password0, sizeof(g_mqttconf_pwd));
+  strncpy(g_iid_name, (char*)gIID_name0, sizeof(g_iid_name));
   PRINT("MQTT configuration:\n");
   PRINT(" hostname: %s\n", g_mqttconf_server);
   PRINT(" port    : %d\n", g_mqttconf_port);
   PRINT(" username: %s\n", g_mqttconf_username);
-  PRINT(" password: %s\n", g_mqttconf_pwd);
+  PRINT(" password: %s\n", "****");
   PRINT(" IID name: %s\n", g_iid_name);
 }
 #endif
@@ -2840,14 +3146,12 @@ static oc_event_callback_retval_t send_delayed_response(void *context)
 {
   oc_separate_response_t *response = (oc_separate_response_t *)context;
 
-  if (response->active)
-  {
+  if (response->active) {
     oc_set_separate_response_buffer(response);
     oc_send_separate_response(response, OC_STATUS_CHANGED);
     PRINT_APP("Delayed response sent\n");
   }
-  else
-  {
+  else {
     PRINT_APP("Delayed response NOT active\n");
   }
 
@@ -2981,6 +3285,7 @@ reset_variables(void)
     }
     if (it->default_present){
       g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
+      do_put_cb(get_datapoint_url(it));
     }
   } 
 
@@ -2991,6 +3296,7 @@ reset_variables(void)
     }
     if (it->default_present){
       g_datapoint_types[it->type].app_set_default_value(get_datapoint_url(it));
+      do_put_cb(get_datapoint_url(it));
     }
   } 
 }
@@ -3001,6 +3307,13 @@ int app_set_serial_number(const char* serial_number)
   return 0;
 }
 
+
+const char* app_get_order_number(void)
+{
+  return (const char*)g_order_number;
+}
+
+
 int app_initialize_stack()
 {
   int init;
@@ -3008,13 +3321,15 @@ int app_initialize_stack()
 
   PRINT("KNX-IOT Server name : \"%s\"\n", MY_NAME);
 
+#ifdef GETCURRENTDIR
   /* show the current working folder */
   char buff[FILENAME_MAX];
   char *retbuf = NULL;
-  retbuf = GetCurrentDir(buff, FILENAME_MAX);
+  retbuf = GETCURRENTDIR(buff, FILENAME_MAX);
   if (retbuf != NULL) {
     PRINT("Current working dir: %s\n", buff);
   }
+#endif
 
   /*
    The storage folder depends on the build system
@@ -3069,7 +3384,11 @@ int app_initialize_stack()
 #endif /* OC_OSCORE */
 
   oc_device_info_t *device = oc_core_get_device_info(0);
-  PRINT("serial number: %s\n", oc_string(device->serialnumber));
+  if (device) {
+    PRINT("serial number: %s\n", oc_string(device->serialnumber));
+  } else {
+    PRINT("no device, cannot print serial number\n");
+  }
   oc_endpoint_t *my_ep = oc_connectivity_get_endpoints(0);
   if (my_ep != NULL) {
     PRINTipaddr(*my_ep);
@@ -3078,6 +3397,11 @@ int app_initialize_stack()
   PRINT("Server \"%s\" running, waiting on incoming "
         "connections.\n",
         MY_NAME);
+
+#ifdef IOT_ROUTER
+  initialize_device_runtime();
+#endif
+
   return 0;
 }
 
@@ -3190,11 +3514,64 @@ main(int argc, char *argv[])
   #define MAX_HOSTNAME 256
   char hostname[MAX_HOSTNAME];
   // set the hostname
-  ret = gethostname(&hostname[0], MAX_HOSTNAME);
+  int ret = gethostname(&hostname[0], MAX_HOSTNAME);
   if (ret != -1) {
     printf("Hostname:    %s\n", hostname);
-    oc_core_set_device_hostname(0, hostname, MAX_HOSTNAME);
+    oc_core_set_device_hostname(0, hostname);
   }
+ 
+  knx_set_manufacturer_filename("knx_eink_battleships_creds/manu.bin");
+	uint8_t sn[6];
+	/* configure the serial number. must be done before stack initialization */
+	int error = knx_get_stored_serial_number(sn);
+	if (error)
+	{
+		PRINT_APP("WARNING: Unique serial number not found! Using default value...\n");
+	} else {
+		// turn binary to hexadecimal
+		char serial_number_str[13];
+		// serial number in upper case
+		snprintf(serial_number_str,
+				 sizeof(serial_number_str),
+				 "%02X%02X%02X%02X%02X%02X",
+				 sn[0],
+				 sn[1],
+				 sn[2],
+				 sn[3],
+				 sn[4],
+				 sn[5]);
+		app_set_serial_number(serial_number_str);
+	}
+#ifdef OC_SPAKE
+	char pwd[33];
+	error = knx_get_stored_password(pwd);
+	if (error)
+	{
+		PRINT_APP("WARNING: Unique SPAKE Password not found! Using default value...\n");
+	}
+	else
+	{
+		oc_spake_set_password(pwd);
+	}
+
+	uint8_t salt[32], rand[32];
+	uint32_t it;
+	mbedtls_mpi w0;
+	mbedtls_ecp_point L;
+	mbedtls_mpi_init(&w0);
+	mbedtls_ecp_point_init(&L);
+	error = knx_get_stored_spake(salt, rand, &it, &w0, &L);
+	if (error)
+	{
+		PRINT_APP("WARNING: Unique SPAKE Record not found! Using runtime generated values...\n");
+	}
+	else
+	{
+		oc_spake_set_parameters(rand, salt, it, w0, L);
+		mbedtls_mpi_free(&w0);
+		mbedtls_ecp_point_free(&L);
+	}
+#endif
 #endif  /* __linux__ */
 
   for (int i = 0; i < argc; i++) {

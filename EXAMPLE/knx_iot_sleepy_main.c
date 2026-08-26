@@ -153,15 +153,28 @@ static int ot_serial_dispatch(uint8_t *buf, size_t len, struct ca821x_dev *pDevi
 
 static void ot_state_changed(uint32_t flags, void *context)
 {
+    static uint16_t cur_rloc = 0xffff;
+    uint16_t next_rloc = otThreadGetRloc16(OT_INSTANCE);
+
 	(void)context;
 	if (flags & OT_CHANGED_THREAD_ROLE)
 	{
 		otDeviceRole role = otThreadGetDeviceRole(OT_INSTANCE);
 		printf("Role: %s\n", otThreadDeviceRoleToString(role));
 	}
-	// publish the MDNS service on startup
-	oc_device_info_t *device = oc_core_get_device_info(0);
-	knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+
+  if (next_rloc == cur_rloc) {
+      return; // Don't publish service if the RLOC hasn't changed!
+  }
+
+  // publish the MDNS service on startup
+  oc_device_info_t *device = oc_core_get_device_info(0);
+  if (device) {
+    knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+  } else {
+    PRINT_APP("device not available, cannot publish service\n");
+  }
+
 #ifdef USE_SNTP
 	bool must_update_rtc = (SNTP_GetState() == NO_TIME);
 	if (flags & (OT_CHANGED_IP6_ADDRESS_ADDED | OT_CHANGED_IP6_ADDRESS_REMOVED))
@@ -213,6 +226,12 @@ static void sleep_if_possible(struct ca821x_dev *pDeviceRef, oc_clock_time_t tim
 	if (timeToNextAppEvent > 0x7FFFFFFF || !timeToNextAppEvent)
 		nextAppEvent = 0x7FFFFFFF;
 
+  /* Check for recent interaction. NOTE: This is inconsequential is the function
+  "enable_detection_of_recent_interaction()" hasn't been called in the input
+  file */
+  if (logic_recent_interaction())
+    return;
+
 	/* for OpenThread: */
 	if (!PlatformCanSleep(OT_INSTANCE))
 		return;
@@ -232,6 +251,12 @@ static void sleep_if_possible_no_thread(struct ca821x_dev *pDeviceRef, uint64_t 
 
 	if (timeToNextAppEvent > 0x7FFFFFFF || !timeToNextAppEvent)
 		nextAppEvent = 0x7FFFFFFF;
+
+  /* Check for recent interaction. NOTE: This is inconsequential is the function
+  "enable_detection_of_recent_interaction()" hasn't been called in the input
+  file */
+  if (logic_recent_interaction())
+    return;
 
 	/* check for hardware (application-specific) */
 	if (!hardware_can_sleep())
@@ -283,6 +308,12 @@ void main_KickOffChildResynchMechanism(int seconds)
      s_first_call = false;
 }
 
+#ifdef PHY_TESTS_ENABLED_FOR_CERT_TESTING
+void PHYTEST_Init(struct ca821x_dev *pDeviceRef);
+#endif
+
+struct ca821x_dev dev;
+
 /**
  * main application.
  * intializes the global variables
@@ -295,10 +326,18 @@ int main(void)
 	int init;
 	oc_clock_time_t next_event;
 	u8_t StartupStatus;
-	struct ca821x_dev dev;
 	char thread_pw[33];
 	uint8_t thread_eui64[8];
 	int error;
+
+#ifdef CASCODA_PRODUCTION_ARLOCK
+        // Disable the ICP programming interface for production builds
+        // Only the mass erase command will work - devices can be
+        // reprogrammed but the binary & credentials cannot be
+        // extracted from the debug interface
+        BSP_FlashLock();
+#endif
+
 	cascoda_serial_dispatch = ot_serial_dispatch;
 	// Sleepy Device
 	cascoda_reinitialise = reinitialise_after_wakeup;
@@ -309,6 +348,10 @@ int main(void)
 	// Initialisation of Chip and EVBME
 	StartupStatus = EVBMEInitialise(CA_TARGET_NAME, &dev);
 	BSP_RTCInitialise();
+
+#ifdef PHY_TESTS_ENABLED_FOR_CERT_TESTING
+  PHYTEST_Init(&dev);
+#endif
 
 	error = knx_get_stored_thread_password(thread_pw);
 	error |= knx_get_stored_eui64(thread_eui64);
@@ -367,7 +410,18 @@ int main(void)
 		if (joinCooldownTimer >= POST_DISCOVERY_AWAKE_TIME)
 		{
 			uint64_t sleep_time = curr_backoff_time - POST_DISCOVERY_AWAKE_TIME;
+
+      // Set rxOnWhenIdle to false, otherwise the HWME_SET_request for HWME_POWERCON
+      // in EVBME_CAX_PowerDown() will fail with status "HWME_NO_ACCESS", which will
+      // result in a chip reset.
+      uint8_t rxOnWhenIdle = 0;
+      MLME_SET_request_sync(macRxOnWhenIdle, 0, 1, &rxOnWhenIdle, &dev);
 			sleep_if_possible_no_thread(&dev, sleep_time);
+      // Set rxOnWhenIdle back to true, because when the device hasn't joined yet,
+      // the receiver should be ON when idle to handle the discovery request/response
+      rxOnWhenIdle = 1;
+      MLME_SET_request_sync(macRxOnWhenIdle, 0, 1, &rxOnWhenIdle, &dev);
+
 			joinCooldownTimer += sleep_time;
 		}
 
@@ -520,13 +574,17 @@ int main(void)
 	// the serial number is stored in the oc_device_info_t
 	oc_device_info_t *device = oc_core_get_device_info(0);
 	char hostname_str[50];
-	memset(hostname_str, 0, 49);
-	strcat(hostname_str, "knx-");
-	strcat(hostname_str, oc_string(device->serialnumber));
-	strcat(hostname_str, ".local");
-	oc_core_set_device_hostname(0, hostname_str);
+  if (device) {
+    memset(hostname_str, 0, 49);
+    strcat(hostname_str, "knx-");
+    strcat(hostname_str, oc_string(device->serialnumber));
+    strcat(hostname_str, ".local");
+    oc_core_set_device_hostname(0, hostname_str);
+  } else {
+		PRINT_APP("device not available\n");
+  }
 
-	oc_set_max_app_data_size(1024);
+	oc_set_max_app_data_size(800);
 	oc_set_mtu_size(1232);
 
 	if (init < 0)
@@ -535,8 +593,13 @@ int main(void)
 	}
 
 	// publish the MDNS service on startup
-	// knx_service_sleep_period(SED_POLL_PERIOD);
-	knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+	// safe default value of 15 minutes
+	knx_service_sleep_period(15 * 60 * 1000);
+  if (device) {
+    knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
+  } else {
+    PRINT_APP("device not available, cannot publish service");
+  }
 
 	PRINT("KNX IoT device, waiting on incoming connections.\n");
 

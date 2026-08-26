@@ -32,7 +32,8 @@ project(knx_eink_battleships  C CXX ASM)
 # GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
 # HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
-# OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+# OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 
 include(FetchContent)
 
@@ -40,6 +41,8 @@ option(CASCODA_USE_PRIVATE_SDK "Whether to use proprietary Cascoda code. Necessa
 set(CASCODA_SDK_REF master CACHE STRING "The branch of the Cascoda SDK to use in this build")
 set(KNX_IOT_STACK_REF master CACHE STRING "The branch of the KNX IoT Stack to use in this build")
 set(USE_GITLAB OFF CACHE BOOL "use gitlab as source for KNX IoT Stack")
+
+set(USE_OPTIMZE_FLASH ON CACHE BOOL "use optimized flash usage")
 
 if(CASCODA_USE_PRIVATE_SDK)
   set(CASCODA_SDK_REPO https://github.com/Cascoda/cascoda-sdk-priv.git CACHE STRING "")
@@ -93,6 +96,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
     target_link_libraries(knx_eink_battleships kisClientServer)
 
     if(WIN32)
+    if (WXWIDGETS)
       FetchContent_Declare(
           wxWidgets
           URL https://github.com/wxWidgets/wxWidgets/releases/download/v3.1.5/wxWidgets-3.1.5.7z
@@ -115,6 +119,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL M2351)
       endif()
       add_definitions(-DOC_SIMULATION)
     endif()
+    endif()
 
 
 
@@ -128,8 +133,7 @@ else()
     option(CASCODA_BUILD_BINARIES "Build Binaries" OFF)
 
     message(STATUS "Downloading KNX-IOT & Cascoda SDK source code...")
-    FetchContent_MakeAvailable(${CASCODA_REPO})
-
+    FetchContent_MakeAvailable(${CASCODA_REPO}) 
     add_executable(knx_eink_battleships_ed
       # KNX-IoT code, common across all platforms
       ${PROJECT_SOURCE_DIR}/knx_eink_battleships.c
@@ -147,8 +151,7 @@ else()
       # Library for interfacing with the devboard
       cascoda-bm-devboard
       eink-driver-waveshare-1-54-half-res
-      )
-
+      ) 
     add_executable(knx_eink_battleships_reed
       # KNX-IoT code, common across all platforms
       ${PROJECT_SOURCE_DIR}/knx_eink_battleships.c
@@ -166,8 +169,7 @@ else()
       # Library for interfacing with the devboard
       cascoda-bm-devboard
       eink-driver-waveshare-1-54-half-res
-      )
-
+      ) 
     add_executable(knx_eink_battleships_sleepy
       # KNX-IoT code, common across all platforms
       ${PROJECT_SOURCE_DIR}/knx_eink_battleships.c
@@ -187,19 +189,36 @@ else()
       eink-driver-waveshare-1-54-half-res
       )
 
+    if(CASCODA_PRODUCTION) 
+        target_compile_definitions(knx_eink_battleships_ed PRIVATE CASCODA_PRODUCTION_ARLOCK) 
+        target_compile_definitions(knx_eink_battleships_reed PRIVATE CASCODA_PRODUCTION_ARLOCK) 
+        target_compile_definitions(knx_eink_battleships_sleepy PRIVATE CASCODA_PRODUCTION_ARLOCK)
+    endif()
+
 # include device cmake files, after all the targets have been created so that they may be altered within
 
 
-    if(USE_DEMO_MODE)
-      target_compile_definitions(knx_eink_battleships_ed PUBLIC DEMO_MODE)
-      target_compile_definitions(knx_eink_battleships_reed PUBLIC DEMO_MODE)
-      target_compile_definitions(knx_eink_battleships_sleepy PUBLIC DEMO_MODE)
+    # NOTE: This is because at the moment, LTO is causing printf() not to work, because the
+    # binding with functions in cascoda_host.c doesn't seem to work for some reason
+    if (CASCODA_DO_LTO AND NOT(CASCODA_BM_INTERFACE STREQUAL "NONE"))
+      message(FATAL_ERROR "NOT ALLOWED TO USE LINK-TIME OPTIMIZATION WITH COMMUNICATION INTERFACE ENABLED.")
     endif()
 
-    target_compile_definitions(knx_eink_battleships_ed PRIVATE NO_MAIN)
-    target_compile_definitions(knx_eink_battleships_reed PRIVATE NO_MAIN)
+    if(USE_DEMO_MODE) 
+      target_compile_definitions(knx_eink_battleships_ed PUBLIC DEMO_MODE) 
+      target_compile_definitions(knx_eink_battleships_reed PUBLIC DEMO_MODE) 
+      target_compile_definitions(knx_eink_battleships_sleepy PUBLIC DEMO_MODE)
+    endif()
     
+    if(USE_OPTIMZE_FLASH) 
+      target_compile_definitions(knx_eink_battleships_ed PUBLIC OPTIMIZE_FLASH_SIZE) 
+      target_compile_definitions(knx_eink_battleships_reed PUBLIC OPTIMIZE_FLASH_SIZE) 
+      target_compile_definitions(knx_eink_battleships_sleepy PUBLIC OPTIMIZE_FLASH_SIZE)
+    endif() 
+    target_compile_definitions(knx_eink_battleships_ed PRIVATE NO_MAIN) 
+    target_compile_definitions(knx_eink_battleships_reed PRIVATE NO_MAIN) 
     target_compile_definitions(knx_eink_battleships_sleepy PRIVATE NO_MAIN SLEEPY)
+
 
     if(NOT DEFINED STACK_SIZE_KB)
       set(STACK_SIZE_KB "5" CACHE STRING "Number of KB to alloc stack")
@@ -212,30 +231,39 @@ else()
     math(EXPR HEAP_SIZE_REED "1024 * (${HEAP_SIZE_BASE_KB}-4)")
     math(EXPR HEAP_SIZE_SLEEPY "1024 * (${HEAP_SIZE_BASE_KB})")
     
-    # Set the size of the stack and the heap, respectively
-    cascoda_configure_memory(knx_eink_battleships_ed ${STACK_SIZE} ${HEAP_SIZE_ED})
-    cascoda_configure_memory(knx_eink_battleships_reed ${STACK_SIZE} ${HEAP_SIZE_REED})
+    # Set the size of the stack and the heap, respectively 
+    cascoda_configure_memory(knx_eink_battleships_ed ${STACK_SIZE} ${HEAP_SIZE_ED}) 
+    cascoda_configure_memory(knx_eink_battleships_reed ${STACK_SIZE} ${HEAP_SIZE_REED}) 
     cascoda_configure_memory(knx_eink_battleships_sleepy ${STACK_SIZE} ${HEAP_SIZE_SLEEPY})
 
-    # Generate the .bin file to be flashed onto the Chili
-    cascoda_make_binary(knx_eink_battleships_ed CASCODA_BUILD_KNX)
-    cascoda_make_binary(knx_eink_battleships_reed CASCODA_BUILD_KNX)
-    cascoda_make_binary(knx_eink_battleships_sleepy CASCODA_BUILD_KNX)
-    file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+    if (NOT DEFINED CASCODA_SPI_RX_FIFO_SIZE)
+      set(CASCODA_SPI_RX_FIFO_SIZE "7" CACHE STRING "The number of buffers used for receiving SPI messages from the transceiver")
+    endif()
+    if (NOT DEFINED CASCODA_SPI_RX_FIFO_RESV)
+      set(CASCODA_SPI_RX_FIFO_RESV "4" CACHE STRING "The number of buffers used for receiving SPI messages from the transceiver")
+    endif()
 
+    # Set the size of SPI Rx Fifo buffers 
+    cascoda_configure_spi_bufs(knx_eink_battleships_ed ${CASCODA_SPI_RX_FIFO_SIZE} ${CASCODA_SPI_RX_FIFO_RESV}) 
+    cascoda_configure_spi_bufs(knx_eink_battleships_reed ${CASCODA_SPI_RX_FIFO_SIZE} ${CASCODA_SPI_RX_FIFO_RESV}) 
+    cascoda_configure_spi_bufs(knx_eink_battleships_sleepy ${CASCODA_SPI_RX_FIFO_SIZE} ${CASCODA_SPI_RX_FIFO_RESV})
+    # Generate the .bin file to be flashed onto the Chili 
+    cascoda_make_binary(knx_eink_battleships_ed CASCODA_BUILD_KNX) 
+    cascoda_make_binary(knx_eink_battleships_reed CASCODA_BUILD_KNX) 
+    cascoda_make_binary(knx_eink_battleships_sleepy CASCODA_BUILD_KNX)
+    file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/bin) 
     add_custom_command(TARGET knx_eink_battleships_ed
       POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy knx_eink_battleships_ed ${PROJECT_BINARY_DIR}/bin
       COMMAND ${CMAKE_COMMAND} -E copy knx_eink_battleships_ed.bin ${PROJECT_BINARY_DIR}/bin
       COMMAND ${CMAKE_COMMAND} -E remove knx_eink_battleships_ed
-    )
+    ) 
     add_custom_command(TARGET knx_eink_battleships_reed
       POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy knx_eink_battleships_reed ${PROJECT_BINARY_DIR}/bin
       COMMAND ${CMAKE_COMMAND} -E copy knx_eink_battleships_reed.bin ${PROJECT_BINARY_DIR}/bin
       COMMAND ${CMAKE_COMMAND} -E remove knx_eink_battleships_reed
-    )
-    
+    ) 
     add_custom_command(TARGET knx_eink_battleships_sleepy
       POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy knx_eink_battleships_sleepy ${PROJECT_BINARY_DIR}/bin
@@ -262,11 +290,18 @@ else()
         endif()
     endif()
 
-    if (CASCODA_OTA_UPGRADE_ENABLED EQUAL 1)
+    if (CASCODA_OTA_UPGRADE_ENABLED)
         if (NOT TARGET copy-ota-bootloader)
           add_custom_target(copy-ota-bootloader ALL DEPENDS ota-bootloader)
           add_custom_command(TARGET copy-ota-bootloader
             POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Listing contents of _deps/${CASCODA_REPO}-build/bin:"
+            COMMAND ls -l ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin
+
+            COMMAND ${CMAKE_COMMAND} -E echo "Listing contents of ${PROJECT_BINARY_DIR}/bin:"
+            COMMAND ls -l ${PROJECT_BINARY_DIR}/bin
+
+            COMMAND ${CMAKE_COMMAND} -E echo "Copying ota-bootloader and .bin files..."
             COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ota-bootloader ${PROJECT_BINARY_DIR}/bin
             COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/_deps/${CASCODA_REPO}-build/bin/ota-bootloader.bin ${PROJECT_BINARY_DIR}/bin
           )

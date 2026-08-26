@@ -228,7 +228,7 @@ void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
 {
   // 20 min wakeup if no tasklet is scheduled (should not happen)
   uint32_t taskletTimeLeft = 20 * 60 * 1000;
-
+  static uint32_t time_of_last_wake = 0;
 
   /* schedule wakeup */
   TASKLET_GetTimeToNext(&taskletTimeLeft);
@@ -236,13 +236,16 @@ void hardware_sleep(struct ca821x_dev *pDeviceRef, uint32_t nextAppEvent)
   if (taskletTimeLeft > nextAppEvent)
     taskletTimeLeft = nextAppEvent;
 
-  bool sleep_after_joining = otThreadGetDeviceRole(OT_INSTANCE) != OT_DEVICE_ROLE_DETACHED;
+  bool is_detached = otThreadGetDeviceRole(OT_INSTANCE) == OT_DEVICE_ROLE_DETACHED;
+  bool has_been_awake = TIME_Cmp(TIME_ReadAbsoluteTime(), time_of_last_wake + 700) >= 0;
+  bool can_sleep_while_detached = (is_detached && has_been_awake);
 
   /* check that it's worth going to sleep */
-  if (taskletTimeLeft > 100 && sleep_after_joining)
+  if (( !is_detached || can_sleep_while_detached ) && taskletTimeLeft > 100)
   {
     /* and sleep */
-    DVBD_DevboardSleep(taskletTimeLeft, pDeviceRef); 
+    DVBD_Sleep(WUP_WAKEUP_ALL, taskletTimeLeft, pDeviceRef); 
+    time_of_last_wake = TIME_ReadAbsoluteTime();
   }
 }
 

@@ -51,6 +51,7 @@
 #include "openthread/ping_sender.h"
 #include "platform.h"
 #include "manufacturer_storage.h"
+#include "sed_poll.h"
  
 
 #define SCHEDULE_NOW 0
@@ -68,7 +69,7 @@ uint8_t user_interaction_occurred = 0;
 
 
 ///////////////////////////////////////////////////////////////////////////////
-//              App logic initialisation                                     //
+//              App logic external-facing functions                          //
 ///////////////////////////////////////////////////////////////////////////////
 
 void logic_initialize()
@@ -83,4 +84,11 @@ void logic_role_changed()
 
 bool logic_is_role_screen()
 { 
+}
+
+bool logic_recent_interaction(void)
+{
+ 
+
+  return false;
 }

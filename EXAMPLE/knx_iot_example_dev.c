@@ -427,9 +427,9 @@ static void exit_programming_mode(size_t device_index)
   oc_device_info_t* device = oc_core_get_device_info(0);
   knx_publish_service(oc_string(device->serialnumber), device->iid, device->ia, device->pm);
 #ifdef SLEEPY
-  // Devices remain awake for 20 seconds after PM mode is disabled, to ensure programming
+  // Devices remain awake for 60 seconds after PM mode is disabled, to ensure programming
   // is fast and reliable
-  TASKLET_ScheduleDelta(&become_sleepy_tasklet, 20 * 1000, NULL);
+  TASKLET_ScheduleDelta(&become_sleepy_tasklet, 60 * 1000, NULL);
 #endif
 }
 

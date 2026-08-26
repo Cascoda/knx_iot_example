@@ -64,9 +64,9 @@ extern "C" {
 #define THIS_DEVICE 0 //!< single device instance, e.g. number 0
 
 // URL defines
-#define URL_LED_1 "/p/o_1_1" //!< URL "LED_1"  desc:""
-#define URL_PB_1 "/p/o_2_2" //!< URL "PB_1"  desc:""
-#define URL_INFOONOFF_1 "/p/o_3_3" //!< URL "InfoOnOff_1"  desc:""
+#define URL_LED_1 "/p/o_1_1" /* URL 'LED_1'  desc:'' */
+#define URL_PB_1 "/p/o_2_2" /* URL 'PB_1'  desc:'' */
+#define URL_INFOONOFF_1 "/p/o_3_3" /* URL 'InfoOnOff_1'  desc:'' */
 
 typedef enum DatapointType{
   DatapointType_bool,
@@ -80,13 +80,17 @@ typedef enum DatapointType{
 typedef struct datapoint_t {
   oc_resource_t resource;
   const char *const *metadata;
+#ifndef OPTIMIZE_FLASH_SIZE
   const char *feedback_url;
+#endif
   DatapointType type;
   void *g_var;
+#ifndef OPTIMIZE_FLASH_SIZE
   volatile void *g_fault;
-  bool persistent;
-  bool default_present;
-  int num_elements;
+#endif
+  uint16_t num_elements;
+  uint8_t persistent : 1;
+  uint8_t default_present : 1;
 } datapoint_t;
 
 /* all data points */
@@ -105,13 +109,36 @@ const datapoint_t *get_datapoint_by_url(const char *url);
 
 /**
  * @brief Returns the url of the module by instance
+ * 
+ * Example usage:
+ * 
+ * char URL_instance[50];
+ * uint8_t module_index = 4;
+ * get_module_url(URL_instance, "/p/S_1", module_index);
+ * 
+ * // Result: URL_instance becomes "/p/S_4"
  *
  * @param out_url URL of the datapoint given back (e.g. with the corrected post fix)
  * @param in_url URL of the datapoint of the module
  * @param module_index URL the module index
  * @return false if operation successful, true if something went wrong 
  */
-bool get_module_url(char* out_url, const char* in_url, int module_index); 
+bool get_module_url(char* out_url, const char* in_url, int module_index);
+
+/**
+ * @brief Returns the instance number of the url.
+ *        NOTE: Only works for instance numbers 1-999.
+ * 
+ * Example usage:
+ * 
+ * uint8_t instance_num = get_instance_num_from_url("/p/S_13");
+ * 
+ * // Result: instance_num will be assigned the integer 13.
+ *
+ * @param url url of the datapoint, from which the instance number will be extracted
+ * @return 0 if any failure occurred. Otherwise, the instance number is returned.
+ */
+uint16_t get_instance_num_from_url(const char *url); 
 
 ///@defgroup DPT_Switch
 ///@ingroup DPT_Switch
@@ -215,6 +242,14 @@ int app_initialize_stack();
  */
 int app_set_serial_number(const char* serial_number);
 
+
+/**
+ * @brief retrieves the order number number
+ * 
+ * @return order_number the order_number as string
+ */
+const char* app_get_order_number(void);
+
 /**
  * @brief Gets the number of elements in dp/param array
  * 
@@ -248,6 +283,19 @@ bool app_is_DPT_Switch_url(const char* url);
  * ~~~
  */
 void app_set_DPT_Switch_default_value(const char* url);
+
+/**
+ * @ingroup DPT_Switch
+ * @brief Set a DPT_Switch to the default value, and write
+ * said value to persistent storage if the parameter is persistent
+ * 
+ * @param[in] url the url for the DPT_Switch to set
+ * 
+ * ~~~{.c}
+ * app_set_DPT_Switch_default_value("/some/url");
+ * ~~~
+ */
+void app_set_DPT_Switch_default_value_persistent(const char* url);
 
 /**
  * @ingroup DPT_Switch
@@ -683,6 +731,17 @@ void app_set_fault_variable(const char* url, bool value);
  * @return false: No entry in Group Object Table has the URL
  */
 bool app_is_url_in_use(const char* url);
+
+
+/**
+ * @brief Generic function to set a value
+ *
+ * @param dp the data point
+ * @param in data going in
+ * @param start start position
+ * @param n amount to set
+ */
+void datapoint_set(const datapoint_t *dp, void *in, int start, int n) ;
 
 /**
  * @brief function to report if the (oscore) security is turn on for this instance

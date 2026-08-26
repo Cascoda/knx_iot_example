@@ -14,7 +14,7 @@ LED:
 - LED 2 is the LSAB that can be controlled by an LSSB.
 
 Programming Mode:
-- Press SW4 to put the device into and out of programming mode.
+- Hold down SW4 for > 1s to put the device into and out of programming mode.
  The LED next to SW3 will keep blinking
 while the device is in programming mode.
 
@@ -82,9 +82,9 @@ handling the GUI (wxWidgets) and embedded (chili) to connect to the hardware.
 
 ### The KNX information
 
-- serial number : 00FA10010710
+- serial number : 029B10010710
 - password : 4N6AFK6T83YWDUTW23U2
-- QR info : KNX:S:00FA10010710;P:4N6AFK6T83YWDUTW23U2
+- QR info : KNX:S:029B10010710;P:4N6AFK6T83YWDUTW23U2
 
 ### Data points
 

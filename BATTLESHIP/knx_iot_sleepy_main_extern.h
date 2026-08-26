@@ -45,6 +45,18 @@ extern "C"
 #endif
 
     /**
+     * @brief Determine whether a recent interaction with the device has occurred.
+     *        By "interaction" here we mean any button press that results in an action
+     *        (i.e. that has been registered as callback)
+     *        
+     *        This can be used to help determine whether the device should go to sleep or not.
+     * 
+     * @return True if a recent_interaction has occurred.
+     *         False otherwise
+     */
+    bool logic_recent_interaction(void);
+
+    /**
      * @brief define what happens when receiving a post mesage on a URL
      *
      * @param url the URL of the message as a string

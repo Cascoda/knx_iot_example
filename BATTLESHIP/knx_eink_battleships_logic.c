@@ -51,6 +51,7 @@
 #include "openthread/ping_sender.h"
 #include "platform.h"
 #include "manufacturer_storage.h"
+#include "sed_poll.h"
 ///////////////////////////////////////////////////////////////////////////////
 //               EINK code                                                   //
 ///////////////////////////////////////////////////////////////////////////////
@@ -65,6 +66,19 @@ uint32_t g_eink_draws_without_refresh = 0;
 const uint32_t g_eink_draws_cutoff = 12;
 enum BattDisplaySymbol g_batt_display_symbol = BATT_DISPLAY_ICON;
 ca_tasklet screen_Tasklet;
+
+// If true, enable mechanism for detecting recent interaction
+static bool g_recent_interaction_detection_enabled = false;
+
+// Flag to indicate whether an interaction has happened recently
+static bool g_recent_interaction;
+
+// Tasklet for resetting the flag that detects recent interactions
+static ca_tasklet g_recent_interaction_tasklet;
+
+// Duration threshold for what is considered a "recent" interaction
+static uint32_t g_recent_threshold;
+
 #ifdef TRANSLATE_PRESENT
 #define T translate
 extern char *translate(const char *s); 
@@ -1174,7 +1188,6 @@ static int g_selected_row;static void screen_header_draw(enum Screen nr)
   int num_screens = NUM_SCREENS-first_screen;
   int screen_nr = nr-first_screen+1;
   const char *title = screen_get_title(nr);
-  sprintf((char *)&screen_str, "%d", screen_nr);
   // generic stuff
   display_drawLine(2, 12, display_width, 12, BLACK);
 
@@ -1185,6 +1198,41 @@ static int g_selected_row;static void screen_header_draw(enum Screen nr)
     display_setCursor(35, 2);
     snprintf(screen_str, 19, "%d/%d", screen_nr, num_screens);
   }
+  display_puts_max_n(screen_str, 11);
+}
+
+static void screen_header_draw_with_instance(enum Screen nr, uint8_t inst)
+{
+  int display_width  = display_getWidth();
+  char screen_str[32];
+  int first_screen = TABLES_SCREEN+1;
+  int num_screens = NUM_SCREENS-first_screen;
+  int screen_nr = nr-first_screen+1;
+  const char *title = screen_get_title(nr);
+  // generic stuff
+  display_drawLine(2, 12, display_width, 12, BLACK);
+
+  if (title){
+    display_setCursor(3, 2);
+    snprintf(screen_str, 19, "%s %d", title, inst);
+  } else {
+    display_setCursor(35, 2);
+    snprintf(screen_str, 19, "%d/%d", screen_nr, num_screens);
+  }
+
+  display_puts_max_n(screen_str, 11);
+}
+
+static void screen_header_draw_custom_str(char *str)
+{
+  int display_width  = display_getWidth();
+  char screen_str[32];
+
+  display_drawLine(2, 12, display_width, 12, BLACK);
+
+  display_setCursor(3, 2);
+  snprintf(screen_str, 19, "%s", str);
+
   display_puts_max_n(screen_str, 11);
 }
 
@@ -1214,6 +1262,13 @@ static struct menu_t g_system_menu[] = {
 void app_header_draw(enum Screen nr)
 {
   screen_header_draw(nr);}
+
+void app_header_draw_with_instance(enum Screen nr, uint8_t instance_nr)
+{
+  screen_header_draw_with_instance(nr, instance_nr);}
+
+void app_header_draw_custom_str(char *str) {
+  screen_header_draw_custom_str(str);}
 
 const int system_menu_entries = 5;
 
@@ -1254,7 +1309,6 @@ void menu_scroll()
     g_scroll_position = g_selected_row;
 }
 
-
 bool load_menu_screen()
 {
   app_header_draw(MENU_SCREEN);
@@ -1269,8 +1323,11 @@ void menu_next()
     g_selected_row = 0;
   menu_scroll();
   refresh_screen(false);
+  ++g_eink_draws_without_refresh;
   // do not refresh while in the menu, refresh will be done sholtly after entering a regular page
-  g_eink_draws_without_refresh = g_eink_draws_cutoff;
+  if (g_eink_draws_without_refresh > g_eink_draws_cutoff) {
+    g_eink_draws_without_refresh = g_eink_draws_cutoff;
+  }
   // cache the selected menu row (only for the system menu for now)
   if(g_screen_nr == MENU_SCREEN)
     g_menu_screen_selected_row = g_selected_row;
@@ -1283,7 +1340,11 @@ void menu_prev()
     g_selected_row = (g_cur_menu_entries-1);
   menu_scroll();
   refresh_screen(false);
-  g_eink_draws_without_refresh = g_eink_draws_cutoff;
+  ++g_eink_draws_without_refresh;
+  // do not refresh while in the menu, refresh will be done sholtly after entering a regular page
+  if (g_eink_draws_without_refresh > g_eink_draws_cutoff) {
+    g_eink_draws_without_refresh = g_eink_draws_cutoff;
+  }
   if(g_screen_nr == MENU_SCREEN)
     g_menu_screen_selected_row = g_selected_row;
 }
@@ -1299,25 +1360,31 @@ void menu_select()
 bool load_dev_screen()
 {
   app_header_draw(DEV_SCREEN);
+
   oc_device_info_t *device = oc_core_get_device_info(THIS_DEVICE);
-  char screen_str[20];
   if (device == NULL) {
     display_setCursor(3, EINK_LINE_NO(1));
     display_puts(T("Not initialised"));
     return true;  
   }
 
+  char screen_str[20];
+
   display_setCursor(3, EINK_LINE_NO(1));
   strncpy(screen_str, oc_string(device->serialnumber), 19);
   display_puts("S:");
   display_puts(screen_str);
 
-  char* hwt = oc_string(device->hwt );
+  uint32_t ia = device->ia;
+  uint32_t ia_0 = (ia >> 12);
+  uint32_t ia_1 = (ia >> 8) & 0xF;
+  uint32_t ia_2 = (ia & 0x000000FF);
+
   display_setCursor(2, EINK_LINE_NO(2));
   display_puts("IA:");
-  snprintf(screen_str, 19, "%d",
-      device->ia);
+  snprintf(screen_str, 19, "%d.%d.%d", ia_0, ia_1, ia_2); 
   display_puts(screen_str);
+
   display_setCursor(2, EINK_LINE_NO(3));
   display_puts("HW:");
   snprintf(screen_str, 19, "%d %d %d",
@@ -1325,6 +1392,7 @@ bool load_dev_screen()
       device->hwv.minor,
       device->hwv.patch);
   display_puts(screen_str);
+
   display_setCursor(2, EINK_LINE_NO(4));
   display_puts("SW:");
   snprintf(screen_str, 19, "%d %d %d",
@@ -1332,12 +1400,21 @@ bool load_dev_screen()
       device->fwv.minor,
       device->fwv.patch);
   display_puts(screen_str);
+
+  char* hwt = oc_string(device->hwt);
   display_setCursor(2, EINK_LINE_NO(5));
   display_puts("HWT");
   display_puts(hwt);
+
   display_setCursor(2, EINK_LINE_NO(6));
   display_puts(T("Model:"));
   display_puts(oc_string(device->model));
+
+  display_setCursor(2, EINK_LINE_NO(8));
+  display_puts("RLOC16:");
+  snprintf(screen_str, 20, "0x%04x", otThreadGetRloc16(OT_INSTANCE));
+  display_puts(screen_str);
+
   return true;
 }
 
@@ -1372,7 +1449,13 @@ bool load_tables_screen()
 
   oc_conv_uint64_to_hex_string(iid_str, device->iid);
   display_setCursor(3, EINK_LINE_NO(1));
+
+#ifdef CA_HF_REBOOT_EASTER_EGG
+  snprintf(screen_str, 17, "IID:h%s", iid_str);
+#else
   snprintf(screen_str, 17, "iid:h%s", iid_str);
+#endif
+
   display_puts(screen_str);
 
   uint8_t num_entries = 0;
@@ -1453,7 +1536,17 @@ static void ping_stat_cb(const otPingSenderStatistics *aStatistics, void *aConte
   (void)aContext;
   requests_sent += aStatistics->mSentCount;
   replies_received += aStatistics->mReceivedCount;
-  refresh_screen(false);
+
+  // 75 pings chosen, on the basis that 1 ping will take approx 4 seconds
+  // (interval is 3s, and timeout is 5s). On that basis, 75 pings
+  // will take around 5 minutes. After that, we want to exit the screen
+  // to prevent the battery from being drained due to a user leaving
+  // the device on this screen.
+  if (requests_sent >= 75) {
+go_MENU_SCREEN();
+  } else {
+    refresh_screen(false);
+  }
 }
 
 bool load_role_screen()
@@ -1463,16 +1556,48 @@ bool load_role_screen()
 
   app_header_draw(ROLE_SCREEN);
 
-  display_setCursor(1, EINK_LINE_NO(4));
+  display_setCursor(1, EINK_LINE_NO(5));
   snprintf(screen_str, 20, "%s: %s", T("Role"), T(otThreadDeviceRoleToString(otThreadGetDeviceRole(OT_INSTANCE))));
   display_puts(screen_str);
+
+  if (!otThreadGetLinkMode(OT_INSTANCE).mRxOnWhenIdle) // Sleepy device
+  {
+    should_go_back_to_sleep = true;
+#ifndef PHY_TESTS_ENABLED_FOR_CERT_TESTING
+    otLinkModeConfig linkMode = {0};
+    linkMode.mRxOnWhenIdle = 1;
+    otThreadSetLinkMode(OT_INSTANCE, linkMode);
+#endif
+  }
 
   if (otThreadGetDeviceRole(OT_INSTANCE) <= OT_DEVICE_ROLE_DETACHED)
     goto exit;
 
+  oc_device_info_t *device = oc_core_get_device_info(THIS_DEVICE);
+  if (device == NULL) {
+    display_setCursor(3, EINK_LINE_NO(1));
+    display_puts(T("Not initialised"));
+    goto exit;
+  }
+
+  display_setCursor(1, EINK_LINE_NO(1));
+  strncpy(screen_str, oc_string(device->serialnumber), 19);
+  display_puts("S:");
+  display_puts(screen_str);
+
+  uint32_t ia = device->ia;
+  uint32_t ia_0 = (ia >> 12);
+  uint32_t ia_1 = (ia >> 8) & 0xF;
+  uint32_t ia_2 = (ia & 0x000000FF);
+
+  display_setCursor(1, EINK_LINE_NO(2));
+  display_puts("IA:");
+  snprintf(screen_str, 19, "%d.%d.%d", ia_0, ia_1, ia_2); 
+  display_puts(screen_str);
+
   if (addr)
   {
-    display_setCursor(1, EINK_LINE_NO(1));
+    display_setCursor(1, EINK_LINE_NO(3));
     snprintf(screen_str, 20, "%02x%02x%02x%02x%02x%02x%02x%02x",
             addr->m8[0],
             addr->m8[1],
@@ -1485,19 +1610,24 @@ bool load_role_screen()
     display_puts(screen_str);
   }
 
-  display_setCursor(1, EINK_LINE_NO(2));
-  snprintf(screen_str, 20, "0x%04x", otThreadGetRloc16(OT_INSTANCE));
+  display_setCursor(1, EINK_LINE_NO(4));
+  snprintf(screen_str, 20, "RLOC16:0x%04x", otThreadGetRloc16(OT_INSTANCE));
   display_puts(screen_str);
-
-  display_setCursor(1, EINK_LINE_NO(5));
-  display_puts(T("Pinging..."));
 
   display_setCursor(1, EINK_LINE_NO(6));
-  snprintf(screen_str, 20, "%s %d", T("Requests:"), requests_sent);
-  display_puts(screen_str);
+  display_puts(T("Pinging..."));
 
   display_setCursor(1, EINK_LINE_NO(7));
-  snprintf(screen_str, 20, "%s %d", T("Replies:"), replies_received);
+  snprintf(screen_str, 20, "%s%d %s%d", T("Req:"), requests_sent, T("Rep:"), replies_received);
+  display_puts(screen_str);
+
+  int8_t lastRssi = 0;
+  otThreadGetParentLastRssi(OT_INSTANCE, &lastRssi);
+
+  otRouterInfo parentInfo;
+  otThreadGetParentInfo(OT_INSTANCE, &parentInfo);
+  display_setCursor(1, EINK_LINE_NO(8));
+  snprintf(screen_str, 20, "RSSI:%d LQI:%d", lastRssi, parentInfo.mLinkQualityIn);
   display_puts(screen_str);
 
   otPingSenderConfig config;
@@ -1510,14 +1640,6 @@ bool load_role_screen()
   config.mInterval = 3000;
   config.mTimeout = 5000;
   config.mAllowZeroHopLimit = false;
-
-  if (!otThreadGetLinkMode(OT_INSTANCE).mRxOnWhenIdle) // Sleepy device
-  {
-    should_go_back_to_sleep = true;
-    otLinkModeConfig linkMode = {0};
-    linkMode.mRxOnWhenIdle = 1;
-    otThreadSetLinkMode(OT_INSTANCE, linkMode);
-  }
 
   otPingSenderPing(OT_INSTANCE, &config);
 
@@ -1755,8 +1877,31 @@ void refresh_screen(bool clean_redraw)
   g_eink_clean_redraw = clean_redraw;
   TASKLET_ScheduleDelta(&screen_Tasklet, SCHEDULE_NOW, NULL);
 }
+
+void enable_detection_of_recent_interactions(uint32_t recent_threshold)
+{
+  g_recent_interaction_detection_enabled = true;
+  g_recent_threshold = recent_threshold;
+}
+
+static ca_error recent_interaction_timeout(void *context)
+{
+  g_recent_interaction = false;
+}
+
+static void kickoff_recent_interaction_mechanism(void)
+{
+  if (!g_recent_interaction_detection_enabled) {
+    return;
+  }
+
+  g_recent_interaction = true;
+  TASKLET_Cancel(&g_recent_interaction_tasklet);
+  TASKLET_ScheduleDelta(&g_recent_interaction_tasklet, g_recent_threshold, NULL);
+}
 struct EinkScreenHandler g_screenHandlers[NUM_SCREENS] =
 {
+
   [SPLASH_SCREEN] = {
     .load_screen_cb = &load_splash_screen,
     .title = "Splash Screen",
@@ -1790,18 +1935,21 @@ struct EinkScreenHandler g_screenHandlers[NUM_SCREENS] =
     .load_screen_cb = &load_help_screen,
     .title = "Help",
     .screen_button_3_LongPress_cb = &go_MENU_SCREEN, 
-  }, [GAME_INTRO] = {
+  }, 
+  [GAME_INTRO] = {
     .load_screen_cb = &load_game_intro,
     .title = NULL,
     .screen_button_1_ShortPress_cb = &go_MENU_SCREEN,
     .screen_button_2_ShortPress_cb = &go_CONTROLS_1,
     .screen_button_3_ShortPress_cb = &game_start, 
-  }, [CONTROLS_1] = {
+  }, 
+  [CONTROLS_1] = {
     .load_screen_cb = &load_controls_1,
     .title = NULL,
     .screen_button_2_ShortPress_cb = &next_controls_page,
     .screen_button_3_ShortPress_cb = &prev_controls_page, 
-  }, [PLACE_SHIPS] = {
+  }, 
+  [PLACE_SHIPS] = {
     .load_screen_cb = &load_place_ships,
     .title = NULL,
     .screen_button_1_ShortPress_cb = &game_move_right,
@@ -1810,11 +1958,13 @@ struct EinkScreenHandler g_screenHandlers[NUM_SCREENS] =
     .screen_button_2_LongPress_cb = &game_move_up,
     .screen_button_3_ShortPress_cb = &game_rotate_current_ship,
     .screen_button_3_LongPress_cb = &game_place_current_ship, 
-  }, [READY_WAIT] = {
+  }, 
+  [READY_WAIT] = {
     .load_screen_cb = &load_screen_ready_wait,
     .title = NULL,
     .screen_button_3_Hold_cb = &stop_waiting, 
-  }, [FIRE_SHOT] = {
+  }, 
+  [FIRE_SHOT] = {
     .load_screen_cb = &load_fire_shot,
     .title = NULL,
     .screen_button_1_ShortPress_cb = &game_move_right,
@@ -1822,11 +1972,13 @@ struct EinkScreenHandler g_screenHandlers[NUM_SCREENS] =
     .screen_button_2_ShortPress_cb = &game_move_down,
     .screen_button_2_LongPress_cb = &game_move_up,
     .screen_button_3_ShortPress_cb = &game_fire_shot, 
-  }, [SHOT_INFO] = {
+  }, 
+  [SHOT_INFO] = {
     .load_screen_cb = &load_shot_info,
     .title = NULL,
     .screen_button_3_ShortPress_cb = &go_prev_screen, 
-  }, [GAME_OVER] = {
+  }, 
+  [GAME_OVER] = {
     .load_screen_cb = &load_game_over,
     .title = NULL,
     .screen_button_3_ShortPress_cb = &game_setup, 
@@ -1840,44 +1992,58 @@ const char* screen_get_title(enum Screen screen)
 void button_1_ShortPress_cb(void *ctx)
 {
   (void)ctx;
-  if (g_screenHandlers[g_screen_nr].screen_button_1_ShortPress_cb)
+  if (g_screenHandlers[g_screen_nr].screen_button_1_ShortPress_cb) {
+    kickoff_recent_interaction_mechanism();
     g_screenHandlers[g_screen_nr].screen_button_1_ShortPress_cb();
+  }
 }
 void button_1_LongPress_cb(void *ctx)
 {
   (void)ctx;
-  if (g_screenHandlers[g_screen_nr].screen_button_1_LongPress_cb)
+  if (g_screenHandlers[g_screen_nr].screen_button_1_LongPress_cb) {
+    kickoff_recent_interaction_mechanism();
     g_screenHandlers[g_screen_nr].screen_button_1_LongPress_cb();
+  }
 }
 void button_2_ShortPress_cb(void *ctx)
 {
   (void)ctx;
-  if (g_screenHandlers[g_screen_nr].screen_button_2_ShortPress_cb)
+  if (g_screenHandlers[g_screen_nr].screen_button_2_ShortPress_cb) {
+    kickoff_recent_interaction_mechanism();
     g_screenHandlers[g_screen_nr].screen_button_2_ShortPress_cb();
+  }
 }
 void button_2_LongPress_cb(void *ctx)
 {
   (void)ctx;
-  if (g_screenHandlers[g_screen_nr].screen_button_2_LongPress_cb)
+  if (g_screenHandlers[g_screen_nr].screen_button_2_LongPress_cb) {
+    kickoff_recent_interaction_mechanism();
     g_screenHandlers[g_screen_nr].screen_button_2_LongPress_cb();
+  }
 }
 void button_3_ShortPress_cb(void *ctx)
 {
   (void)ctx;
-  if (g_screenHandlers[g_screen_nr].screen_button_3_ShortPress_cb)
+  if (g_screenHandlers[g_screen_nr].screen_button_3_ShortPress_cb) {
+    kickoff_recent_interaction_mechanism();
     g_screenHandlers[g_screen_nr].screen_button_3_ShortPress_cb();
+  }
 }
 void button_3_LongPress_cb(void *ctx)
 {
   (void)ctx;
-  if (g_screenHandlers[g_screen_nr].screen_button_3_LongPress_cb)
+  if (g_screenHandlers[g_screen_nr].screen_button_3_LongPress_cb) {
+    kickoff_recent_interaction_mechanism();
     g_screenHandlers[g_screen_nr].screen_button_3_LongPress_cb();
+  }
 }
 void button_3_Hold_cb(void *ctx)
 {
   (void)ctx;
-  if (g_screenHandlers[g_screen_nr].screen_button_3_Hold_cb)
+  if (g_screenHandlers[g_screen_nr].screen_button_3_Hold_cb) {
+    kickoff_recent_interaction_mechanism();
     g_screenHandlers[g_screen_nr].screen_button_3_Hold_cb();
+  }
 } 
 
 void eink_load_screen(enum Screen screen_nr)
@@ -1891,11 +2057,15 @@ void eink_load_screen(enum Screen screen_nr)
     requests_sent = 0;
 
     // If device was sleeping before the pings, then go back to sleep now.
-    if (should_go_back_to_sleep)
-    {
+    if (should_go_back_to_sleep) {
       should_go_back_to_sleep = false;
+#ifndef PHY_TESTS_ENABLED_FOR_CERT_TESTING
       otLinkModeConfig linkMode = {0};
       otThreadSetLinkMode(OT_INSTANCE, linkMode);
+      // Poll after the child tells its parent it is a SED once more
+      // this will help to receive commands send to this devices sooner
+      SED_PollSoon();
+#endif
     }
   }
 
@@ -1972,14 +2142,20 @@ ca_error eink_initial_screen(void *args)
     }
   } else if (g_start_counter == 3) {
     g_start_counter = 4;
-    g_eink_clean_redraw = true;
-    eink_load_screen(SPLASH_SCREEN);
+
+    // Only show the splash screen if a device has not yet been commissioned
+    // onto a Thread network
+	if (!otDatasetIsCommissioned(OT_INSTANCE)) {
+        g_eink_clean_redraw = true;
+        eink_load_screen(SPLASH_SCREEN);
+    }
 
     g_screen_nr = 0;
     oc_storage_read("screen_nr", &g_screen_nr, 1);
 
     if (g_screen_nr == 0) // Meaning nothing was read from the storage
       g_screen_nr = MENU_SCREEN; // Go to the navigation menu
+    
       
     TASKLET_ScheduleDelta(&screen_Tasklet, 3 * 1000, NULL);
 
@@ -1992,23 +2168,35 @@ ca_error eink_initial_screen(void *args)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-//              App logic initialisation                                     //
+//              App logic external-facing functions                          //
 ///////////////////////////////////////////////////////////////////////////////
 
 void logic_initialize()
 {
 // screen update, do it ASAP since it is the splash screen
   TASKLET_Init(&screen_Tasklet, &eink_initial_screen);
-  TASKLET_ScheduleDelta(&screen_Tasklet, INITIAL_SCREEN_TIMEOUT, NULL); 
+  TASKLET_ScheduleDelta(&screen_Tasklet, INITIAL_SCREEN_TIMEOUT, NULL);
+
+  // Initialize tasklet for recent interaction detection
+  TASKLET_Init(&g_recent_interaction_tasklet, &recent_interaction_timeout); 
 }
 
 void logic_role_changed()
 {
-if (g_screen_nr == ROLE_SCREEN || g_screen_nr == DEV_SCREEN)
-    refresh_screen(true); 
+if (g_screen_nr == ROLE_SCREEN || g_screen_nr == DEV_SCREEN) {
+    g_eink_draws_without_refresh = 0; // avoid frequent clean redraws due to role change
+    refresh_screen(false);
+  } 
 }
 
 bool logic_is_role_screen()
 {
   return (g_screen_nr == ROLE_SCREEN); 
+}
+
+bool logic_recent_interaction(void)
+{
+return (g_recent_interaction_detection_enabled && g_recent_interaction); 
+
+  return false;
 }

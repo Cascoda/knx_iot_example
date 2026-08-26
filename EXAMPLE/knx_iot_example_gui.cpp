@@ -36,7 +36,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
-// 2024-06-17 16:16:29.293447
+// 2026-08-26 11:49:45.809466
 
 // For compilers that support precompilation, includes "wx/wx.h".
 #include <wx/wxprec.h>
@@ -55,6 +55,7 @@
 #include "api/oc_knx_dev.h"
 #include "api/oc_knx_sec.h"
 #include "api/oc_knx_fp.h"
+#include "oc_knx.h"
 #include "port/dns-sd.h"
 
 enum
@@ -418,6 +419,9 @@ MyFrame::MyFrame(char* str_serial_number)
   char text[500];
   strcpy(text, "Device Serial Number: -sn ");
   oc_device_info_t* device = oc_core_get_device_info(0);
+  if (device == NULL) {
+    return;
+  }
   strcat(text, oc_string(device->serialnumber));
   wxTextCtrl* Statictext;
   Statictext = new wxTextCtrl(this, wxID_ANY, text, wxPoint(0, 0), wxSize(x_width, x_height));
@@ -535,6 +539,9 @@ void MyFrame::OnProgrammingMode(wxCommandEvent& event)
 
   bool my_val = m_menuFile->IsChecked(CHECK_PM);
   oc_device_info_t* device = oc_core_get_device_info(0);
+  if (device == NULL) {
+    return;
+  }
   device->pm = my_val;
 
   // update the UI
@@ -556,6 +563,9 @@ void MyFrame::OnSleepyMode(wxCommandEvent& event)
 
   bool my_sleepy = m_menuOptions->IsChecked(CHECK_SLEEPY);
   oc_device_info_t* device = oc_core_get_device_info(0);
+  if (device == NULL) {
+    return;
+  }
   
   if (my_sleepy) {
     knx_service_sleep_period(20);
@@ -583,6 +593,9 @@ void MyFrame::updateTextButtons()
 
   // get the device data structure
   oc_device_info_t* device = oc_core_get_device_info(device_index);
+  if (device == NULL) {
+    return;
+  }
   // update the text labels
   // ia_0 == AAxxxxxx = AA
   // ia_1 == xxAAxxxx = AA
@@ -1053,6 +1066,9 @@ void MyFrame::OnAbout(wxCommandEvent& event)
   strcpy(text, "KNX Switching example\n");
   strcat(text, "\nDevice Serial Number: ");
   oc_device_info_t* device = oc_core_get_device_info(0);
+  if (device == NULL) {
+    return;
+  }
   strcat(text, oc_string(device->serialnumber));
   strcat(text,"\n");
   strcat(text,"manufacturer     : cascoda\n");
@@ -1068,7 +1084,7 @@ void MyFrame::OnAbout(wxCommandEvent& event)
   strcat(text, "\n");
   
   strcat(text, "(c) Cascoda Ltd\n");
-  strcat(text, "2024-06-17 16:16:29.293447");
+  strcat(text, "2026-08-26 11:49:45.809466");
   CustomDialog("About", text);
 }
 
@@ -1173,7 +1189,8 @@ void MyFrame::int2gatext(uint32_t value, char* text, bool as_ets)
   if (as_ets) {
     /*
     The so called Group Address structure correlates with its representation style in ETS,
-    see also the relevant ETS Professional article.
+    see also the relevant ETS Professional article at:
+    https://support.knx.org/hc/en-us/articles/115001825344-Group-Address-Style
     The information about the ETS Group Address representation style itself is NOT included in the Group Address.
     '3-level' = main/middle/sub
     main = D7+D6+D5+D4+D3 of the first octet (high address)

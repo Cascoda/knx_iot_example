@@ -74,9 +74,9 @@ handling the GUI (wxWidgets) and embedded (chili) to connect to the hardware.
 
 ### The KNX information
 
-- serial number : 00fa10010713
+- serial number : 029B10010713
 - password : 0MK4U5LV950ST3VRXL8G
-- QR info : KNX:S:00fa10010713;P:0MK4U5LV950ST3VRXL8G
+- QR info : KNX:S:029B10010713;P:0MK4U5LV950ST3VRXL8G
 
 ### Data points
 

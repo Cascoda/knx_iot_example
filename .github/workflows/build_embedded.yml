@@ -10,7 +10,7 @@ jobs:
   build_embedded_secure:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: install ninja
       run: |
         sudo apt-get -y install ninja-build
@@ -24,7 +24,7 @@ jobs:
         chmod +x ./build_win_bin_ninja.sh
         ./build_win_bin_ninja.sh
     - name: Upload
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: embedded_secured
         path: |

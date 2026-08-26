@@ -45,7 +45,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup_windows.outputs.matrix) }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Checkout Submodules
       run: git submodule update --init --recursive
@@ -148,7 +148,7 @@ jobs:
          ls
 
     - name: Upload executable ${{ matrix.config.option_name }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: windows_${{ matrix.config.folder }}_${{ matrix.config.option_name }}
         path: |
@@ -157,7 +157,7 @@ jobs:
   build_embedded_secure:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: install ninja
       run: |
         sudo apt-get -y install ninja-build
@@ -171,7 +171,7 @@ jobs:
         chmod +x ./build_win_bin_ninja.sh
         ./build_win_bin_ninja.sh
     - name: Upload
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: embedded_secured
         path: |
@@ -196,7 +196,7 @@ jobs:
 
     # Checkout the code, and fetch all tags (for version)
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
         path: knx-iot-example

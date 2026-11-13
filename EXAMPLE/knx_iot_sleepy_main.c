@@ -73,6 +73,7 @@
 #include "oc_uuid.h"
 #include "sntp_helper.h"
 #include "oc_helpers.h"
+#include "sed_poll.h"
 
 // Used for knxctl (not yet implemented)
 #define KNX_COMMAND (0xB0)
@@ -104,6 +105,68 @@ void lsm_change_cb(size_t device_index, oc_lsm_state_t current_state, void *data
 void hostname_cb(size_t device_index, oc_string_t host_name, void *data);
 int app_set_serial_number(char *serial_number);
 int app_init(void);
+
+static ca_tasklet g_reset_ot_link_mode_tasklet;
+
+/**
+ * @brief Set the device to RX on when idle
+ */
+static ca_error set_ot_rx_on_when_idle() {
+	TASKLET_Cancel(&g_reset_ot_link_mode_tasklet);
+
+	otLinkModeConfig linkMode = {0};
+	linkMode.mRxOnWhenIdle = 1;
+	int ret = otThreadSetLinkMode(OT_INSTANCE, linkMode);
+	ca_log_note("SWU: RX on when idle set to TRUE (ret = %d)\n", ret);
+
+	// Disable Receiver On When Idle after 3 minutes
+	TASKLET_ScheduleDelta(&g_reset_ot_link_mode_tasklet, 180 * 1000, NULL);
+
+	return ret;
+}
+
+/**
+ * @brief Reset the device to RX off
+ */
+static ca_error reset_ot_link_mode(void *context) {
+	(void)context;
+
+	otLinkModeConfig linkMode = {0};
+	int ret = otThreadSetLinkMode(OT_INSTANCE, linkMode);
+	ca_log_note("SWU: RX on when idle set to FALSE (ret = %d)\n", ret);
+
+	return ret;
+}
+
+/**
+ * @brief Callback to make the device wakeful for ETS download 
+ */
+void lsm_get_cb (void){
+	// Enable Receiver On When Idle, if not already enabled
+	if (!otThreadGetLinkMode(OT_INSTANCE).mRxOnWhenIdle) {
+		PRINT_APP("RxOnWhenIdle not enabled, enabling now");
+		TASKLET_Init(&g_reset_ot_link_mode_tasklet, &reset_ot_link_mode);
+		set_ot_rx_on_when_idle();
+	} else {
+		PRINT_APP("RxOnWhenIdle already enabled, no need to enable");
+	}
+}
+
+/**
+ * @brief Callback to make the device sleepy at the end of ETS download 
+ */
+void fb_cb (void){
+	
+	TASKLET_Cancel(&g_reset_ot_link_mode_tasklet);
+
+	// Disable Receiver, if not already disabled
+	if (otThreadGetLinkMode(OT_INSTANCE).mRxOnWhenIdle) {
+		PRINT_APP("RxOnWhenIdle enabled, disabling now");
+		reset_ot_link_mode(NULL);
+	} else {
+		PRINT_APP("RxOnWhenIdle already disabled, no need to disable");
+	}
+}
 
 #if CASCODA_OTA_UPGRADE_ENABLED
 // Implemented in the cascoda knx-iot port
@@ -280,6 +343,50 @@ static ca_error child_resynch_handler(void *context)
 void main_SetThreadChildTimeout(int seconds)
 {
 	otThreadSetChildTimeout(OT_INSTANCE, seconds);
+}
+
+void swu_bytes_cb(void)
+{
+	// Initialise the SED polling with max_retries set to 0, so that it will keep polling between SoftwareUpdatePackageBytes GET requests until ActionSoftwareUpdate Query PUT message, where the device will then be in wakeful state.
+	// The 60 seconds max_delay can be set lower if we need to poll more frequently.
+	// In the main application file, the SED polling is reinitialised in `initialize_app_state(void)` which is called after the SWU.
+	SED_InitPolling(100, 60 * 1000, 0);
+
+	// Poll now, resets the exponential backoff counter.
+	SED_PollNow();
+}
+
+void swu_state_cb(void)
+{
+	// Initialise the SED polling with max_retries set to 0, so that it will keep polling.
+	// The 60 seconds max_delay can be set lower if we need to poll more frequently.
+	// In the main application file, the SED polling is reinitialised in `initialize_app_state(void)` which is called after the SWU.
+    SED_InitPolling(100, 60 * 1000, 0);
+
+	// Poll now, resets the exponential backoff counter.
+    SED_PollNow();
+}
+
+void swu_method_cb(void)
+{
+	// Initialise the SED polling with max_retries set to 0, so that it will keep polling.
+	// The 60 seconds max_delay can be set lower if we need to poll more frequently.
+	// In the main application file, the SED polling is reinitialised in `initialize_app_state(void)` which is called after the SWU.
+    SED_InitPolling(100, 60 * 1000, 0);
+
+	// Poll now, resets the exponential backoff counter.
+    SED_PollNow();
+}
+
+void swu_hwref_cb(void)
+{
+	// Initialise the SED polling with max_retries set to 0, so that it will keep polling.
+	// The 60 seconds max_delay can be set lower if we need to poll more frequently.
+	// In the main application file, the SED polling is reinitialised in `initialize_app_state(void)` which is called after the SWU.
+    SED_InitPolling(100, 60 * 1000, 0);
+
+	// Poll now, resets the exponential backoff counter.
+    SED_PollNow();
 }
 
 void swu_start_update_cb_imp(size_t device_index, uint32_t start_time, void *data)
@@ -559,9 +666,15 @@ int main(void)
 	oc_set_reset_cb(reset_cb, NULL);
 	oc_set_factory_presets_cb(factory_presets_cb, NULL);
 	oc_set_lsm_change_cb(lsm_change_cb, NULL);
+	oc_set_lsm_get_cb(lsm_get_cb);
+	oc_set_fingerprint_cb(fb_cb);
 #if CASCODA_OTA_UPGRADE_ENABLED
 	oc_set_swu_cb(swu_cb, (void *)"image_name");
 	oc_set_swu_startupdate_cb(swu_start_update_cb_imp, (void *)"image_name");
+	oc_set_swu_bytes_cb(swu_bytes_cb);
+	oc_set_swu_state_cb(swu_state_cb);
+	oc_set_swu_method_cb(swu_method_cb);
+	oc_set_swu_hwref_cb(swu_hwref_cb);
 #endif
 
 	oc_set_programming_mode_cb(prog_mode_cb, NULL);

@@ -73,7 +73,8 @@
 #include "cascoda-bm/cascoda_wait.h"
 #include "ca821x_error.h"
 #include "sed_poll.h"
-#include <openthread/thread.h> 
+#include <openthread/thread.h>
+#include <openthread/srp_client.h>
 #include <platform.h>
 
 //#include "sif_btn_ext_pi4ioe5v6408.h"
@@ -884,6 +885,6 @@ void actuator_test_init()
 
 #ifndef EXCLUDE_CASCODA_BAREMETAL
 //embedded is always built with 
-__attribute__((__weak__)) 
+__attribute__((__weak__))
 extern void app_initialize(){}
 #endif /* EXCLUDE_CASCODA_BAREMETAL */

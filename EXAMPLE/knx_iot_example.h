@@ -47,6 +47,9 @@
  
  */
 
+#ifndef knx_iot_example_H
+#define knx_iot_example_H
+
 #include "oc_api.h"
 #include "oc_core_res.h"
 #include "port/oc_clock.h"
@@ -778,3 +781,5 @@ void dev_btn_toggle_cb(const char *url);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* knx_iot_example_H */

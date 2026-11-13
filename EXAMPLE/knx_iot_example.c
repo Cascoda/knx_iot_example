@@ -132,7 +132,7 @@ static struct timespec ts;
 #endif
 
 #ifndef DPT_varString_8859_1
-#define DPT_varString_8859_1 char
+//#define DPT_varString_8859_1 char
 #endif
 
 #define STORE_PREFIX "app"
@@ -1291,6 +1291,10 @@ void app_str_to_upper(char *str){
   }
 }
 
+#ifdef IOT_ROUTER
+int initialize_device_runtime(void);
+#endif
+
 /**
  * @brief function to set up the device.
  *
@@ -1541,6 +1545,9 @@ get_generic(oc_request_t *request, oc_interface_mask_t interfaces, void *user_da
     oc_send_cbor_response(request, OC_STATUS_OK);
     goto done;
   }
+   // do the generic callback, before the actual framing of the data
+   do_get_cb(get_datapoint_url(dp));
+   
   if (oc_encode_datapoint(dp, pn, ps, false) == false) {
     oc_send_response_no_format(request, OC_STATUS_INTERNAL_SERVER_ERROR);
     goto done;
@@ -1934,6 +1941,11 @@ int app_initialize_stack()
 #ifdef IOT_ROUTER
   initialize_device_runtime();
 #endif
+
+#ifdef TPIOT_ROUTER
+  initialize_device_runtime();
+#endif
+
 
   return 0;
 }

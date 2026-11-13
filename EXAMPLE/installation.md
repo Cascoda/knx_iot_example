@@ -16,6 +16,28 @@
 | Firmware version | [0, 4, 0]  |
 | Sleepy Device | No | 
 
+**Table:** KNX device information
+
+ 
+### Interfaces
+
+ | Type    | Direction | Communication Flags | Description     |
+ |---------|-----------|---------------------|-----------------|
+ | if.a    | Input     | _RW.U._    | Actuator, hardwared actuator |
+ | if.i    | Input     | _RW.U._    | Input, calculated value      |
+ | if.s    | Output    | _R.T.I_    | Sensor, hardwared sensor     |
+ | if.o    | Output    | _R.T.I_    | Output, calculated value     |
+
+
+**Table:** KNX Interfaces
+
+> **NOTE!** Communication Flags _UI_ are disabled by default.
+
+
+> **NOTE!** Communication Flag _C_ is not part of KNX IoT.
+
+<div style="break-after:page"></div> 
+
 ### Data points
 
  | url          | name        | instance        |resource type | interface type | data type |

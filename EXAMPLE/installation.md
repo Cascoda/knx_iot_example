@@ -42,7 +42,7 @@
 
  | url          | name        | instance        |resource type | interface type | data type |
  |--------------|:-----------:|:---------------:| -------------| ---------------|-----------|
- | "/p/o_1_1" | LED_1 | 1 | 417.61 | if.a | DPT_Switch |
+ | "/p/o_1_1" | LED_1 | 1 | 417.52 | if.a | DPT_Switch |
  | "/p/o_2_2" | PB_1 | 1 | 421.61 | if.s | DPT_Switch |
  | "/p/o_3_3" | InfoOnOff_1 | 1 | 417.51 | if.s | DPT_Switch |
 

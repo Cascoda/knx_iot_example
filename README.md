@@ -16,7 +16,7 @@ The following KNX IoT Development Board Demos can be found in the releases page.
 |--------------| ------------| ----------------| --------------------- |
 | CARGB | Colour Actuator RGB  | LED Driver 3 Click | N |
 | RELAY  | Relay Actuator | RELAY Click | N |
-| RTS | Room Temperature Sensor | Thermo 3 Click | Y |
+| RTS | Room Temperature Sensor | Thermo 3 Click | N |
 
 In the zip file contained in the release, you will find a folder which contains the following:
 - One ETS project to configure and interact with all three of the demos. _The password for this file is the letter "a"_.

@@ -30,7 +30,7 @@
 
 | url  | channel/usage       | instance |resource type | interface type | data type |
 |------| --------------------| -------- | -------------| ---------------|-----------|
-| "/p/o_1_1"  | LED_1 |  1 |urn:knx:dpa.417.61 | if.a | |
+| "/p/o_1_1"  | LED_1 |  1 |urn:knx:dpa.417.52 | if.a | |
 | "/p/o_2_2"  | PB_1 |  1 |urn:knx:dpa.421.61 | if.s | |
 | "/p/o_3_3"  | InfoOnOff_1 |  1 |urn:knx:dpa.417.51 | if.s | |
 

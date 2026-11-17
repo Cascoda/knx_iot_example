@@ -33,6 +33,7 @@ project(knx_iot_example  C CXX ASM)
 # HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 # OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# NO SLEEPY END DEVICE BUILD
 
 
 include(FetchContent)
@@ -167,29 +168,11 @@ else()
       ca821x-openthread-bm-ftd
       # Library for interfacing with the devboard
       cascoda-bm-devboard
-      ) 
-    add_executable(knx_iot_example_sleepy
-      # KNX-IoT code, common across all platforms
-      ${PROJECT_SOURCE_DIR}/knx_iot_example.c
-      # KNX-IoT code, common across all platforms
-      ${PROJECT_SOURCE_DIR}/knx_iot_example_dev.c
-      ${PROJECT_SOURCE_DIR}/knx_iot_example_logic.c
-      # Embedded specific main loop, which initialises the MCU, communications & then runs the KNX application
-      ${PROJECT_SOURCE_DIR}/knx_iot_sleepy_main.c
-    )
-    target_link_libraries(knx_iot_example_sleepy 
-      kisClientServer
-      kis-port
-      # Openthread Minimal Thread Device
-      ca821x-openthread-bm-mtd
-      # Library for interfacing with the devboard
-      cascoda-bm-devboard
       )
 
     if(CASCODA_PRODUCTION) 
         target_compile_definitions(knx_iot_example_ed PRIVATE CASCODA_PRODUCTION_ARLOCK) 
-        target_compile_definitions(knx_iot_example_reed PRIVATE CASCODA_PRODUCTION_ARLOCK) 
-        target_compile_definitions(knx_iot_example_sleepy PRIVATE CASCODA_PRODUCTION_ARLOCK)
+        target_compile_definitions(knx_iot_example_reed PRIVATE CASCODA_PRODUCTION_ARLOCK)
     endif()
 
 # include device cmake files, after all the targets have been created so that they may be altered within
@@ -203,18 +186,15 @@ else()
 
     if(USE_DEMO_MODE) 
       target_compile_definitions(knx_iot_example_ed PUBLIC DEMO_MODE) 
-      target_compile_definitions(knx_iot_example_reed PUBLIC DEMO_MODE) 
-      target_compile_definitions(knx_iot_example_sleepy PUBLIC DEMO_MODE)
+      target_compile_definitions(knx_iot_example_reed PUBLIC DEMO_MODE)
     endif()
     
     if(USE_OPTIMZE_FLASH) 
       target_compile_definitions(knx_iot_example_ed PUBLIC OPTIMIZE_FLASH_SIZE) 
-      target_compile_definitions(knx_iot_example_reed PUBLIC OPTIMIZE_FLASH_SIZE) 
-      target_compile_definitions(knx_iot_example_sleepy PUBLIC OPTIMIZE_FLASH_SIZE)
+      target_compile_definitions(knx_iot_example_reed PUBLIC OPTIMIZE_FLASH_SIZE)
     endif() 
     target_compile_definitions(knx_iot_example_ed PRIVATE NO_MAIN) 
-    target_compile_definitions(knx_iot_example_reed PRIVATE NO_MAIN) 
-    target_compile_definitions(knx_iot_example_sleepy PRIVATE NO_MAIN SLEEPY)
+    target_compile_definitions(knx_iot_example_reed PRIVATE NO_MAIN)
 
 
     if(NOT DEFINED STACK_SIZE_KB)
@@ -230,8 +210,7 @@ else()
     
     # Set the size of the stack and the heap, respectively 
     cascoda_configure_memory(knx_iot_example_ed ${STACK_SIZE} ${HEAP_SIZE_ED}) 
-    cascoda_configure_memory(knx_iot_example_reed ${STACK_SIZE} ${HEAP_SIZE_REED}) 
-    cascoda_configure_memory(knx_iot_example_sleepy ${STACK_SIZE} ${HEAP_SIZE_SLEEPY})
+    cascoda_configure_memory(knx_iot_example_reed ${STACK_SIZE} ${HEAP_SIZE_REED})
 
     if (NOT DEFINED CASCODA_SPI_RX_FIFO_SIZE)
       set(CASCODA_SPI_RX_FIFO_SIZE "7" CACHE STRING "The number of buffers used for receiving SPI messages from the transceiver")
@@ -242,12 +221,10 @@ else()
 
     # Set the size of SPI Rx Fifo buffers 
     cascoda_configure_spi_bufs(knx_iot_example_ed ${CASCODA_SPI_RX_FIFO_SIZE} ${CASCODA_SPI_RX_FIFO_RESV}) 
-    cascoda_configure_spi_bufs(knx_iot_example_reed ${CASCODA_SPI_RX_FIFO_SIZE} ${CASCODA_SPI_RX_FIFO_RESV}) 
-    cascoda_configure_spi_bufs(knx_iot_example_sleepy ${CASCODA_SPI_RX_FIFO_SIZE} ${CASCODA_SPI_RX_FIFO_RESV})
+    cascoda_configure_spi_bufs(knx_iot_example_reed ${CASCODA_SPI_RX_FIFO_SIZE} ${CASCODA_SPI_RX_FIFO_RESV})
     # Generate the .bin file to be flashed onto the Chili 
     cascoda_make_binary(knx_iot_example_ed CASCODA_BUILD_KNX) 
-    cascoda_make_binary(knx_iot_example_reed CASCODA_BUILD_KNX) 
-    cascoda_make_binary(knx_iot_example_sleepy CASCODA_BUILD_KNX)
+    cascoda_make_binary(knx_iot_example_reed CASCODA_BUILD_KNX)
     file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/bin) 
     add_custom_command(TARGET knx_iot_example_ed
       POST_BUILD
@@ -260,12 +237,6 @@ else()
       COMMAND ${CMAKE_COMMAND} -E copy knx_iot_example_reed ${PROJECT_BINARY_DIR}/bin
       COMMAND ${CMAKE_COMMAND} -E copy knx_iot_example_reed.bin ${PROJECT_BINARY_DIR}/bin
       COMMAND ${CMAKE_COMMAND} -E remove knx_iot_example_reed
-    ) 
-    add_custom_command(TARGET knx_iot_example_sleepy
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy knx_iot_example_sleepy ${PROJECT_BINARY_DIR}/bin
-      COMMAND ${CMAKE_COMMAND} -E copy knx_iot_example_sleepy.bin ${PROJECT_BINARY_DIR}/bin
-      COMMAND ${CMAKE_COMMAND} -E remove knx_iot_example_sleepy
     )
 
 

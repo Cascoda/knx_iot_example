@@ -220,7 +220,7 @@ const datapoint_t g_datapoints[3] = {
       /*name*/ oc_string_create_const(EMPTY_NAME),
 #endif
       /*uri*/ oc_string_create_const("/p/o_1_1"),
-      /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.61" ),
+      /*types*/ oc_string_array_create_const(_ECHO, 1, "urn:knx:dpa.417.52" ),
       /*dpt*/ oc_string_create_const("urn:knx:dpt.switch"),  
       /*get_handler*/ {get_generic, (void*)&g_datapoints[0]},
       /*put_handler*/ {put_generic, (void*)&g_datapoints[0]},

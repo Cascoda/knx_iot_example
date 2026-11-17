@@ -1,13 +1,13 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion" : "1.6",
-  "serialNumber" : "urn:uuid:e71e2ece-272c-4f99-8130-fab72546b42a",
+  "serialNumber" : "urn:uuid:8fa7c4df-f24c-42d8-ae43-add9baf655ab",
   "version" : 1,
   "metadata": {
     "manufacturer" : {
       "name": "Cascoda LTD"
     },
-    "timestamp": "2026-11-13T16:08:28Z",
+    "timestamp": "2026-11-16T17:03:19Z",
     "component": {
       "type": "application",
       "name": "KNX Switching example",
